@@ -100,7 +100,7 @@ button:disabled{opacity:.6;cursor:default}
 
   <p class="srcline"><i class="dot" id="dot"></i><span id="src">Conectando con el mercado…</span></p>
 
-  <p class="callout"><b>Sin ventaja demostrada.</b> Las reglas que usa ahora la oficina perdieron dinero en la prueba con 3 años de datos y quedaron muy por debajo de comprar y mantener. Tómalo como una demostración, no como una forma de ganar dinero.</p>
+  <p class="callout"><b>Sin ventaja demostrada.</b> La oficina revisa el mercado una vez al día con la regla «Diaria», que pasó por poco la prueba con 3 años de datos (ganó mucho menos que comprar y mantener y estuvo fuera del mercado más de la mitad del tiempo). Dinero ficticio: es una prueba en vivo, no una forma de ganar dinero.</p>
 
   <div class="bar">
     <button id="meet" type="button">Convocar reunión</button>
@@ -240,7 +240,7 @@ function flush(){
 }
 
 /* ---------- estado ---------- */
-var FEE=0.001,SLIP=0.0005,START_CAP=10000,TFMS=4*3600*1000,KEY='mesa-satoshi-v1';
+var FEE=0.001,SLIP=0.0005,START_CAP=10000,TFMS=4*3600*1000,LMS=86400000,LIVE_ATR=0.06,KEY='mesa-satoshi-v2';
 var price=0,lastTick=0,hist=[],eq=[],cap=START_CAP,pos=null,ops=0,wins=0,dayPnl=0,dayKey='',trades=[];
 var candles=[],closes=[],cur=null,fng=null,src=null,lastReviewT=0,online=false,fails=0;
 var pendingReview=false,pendingExit=null,closing=false,inScene=false;
@@ -249,7 +249,7 @@ function dkey(t){return new Date(t).toISOString().slice(0,10);}
 function pct(x){return (x>=0?'+':'')+(x*100).toFixed(1).replace('.',',')+' %';}
 function pct1(x){return (x*100).toFixed(1).replace('.',',')+' %';}
 function hhmm(t){var d=new Date(t);return pad(d.getHours())+':'+pad(d.getMinutes());}
-function latestClosedT(){return Math.floor(Date.now()/TFMS)*TFMS-TFMS;}
+function latestClosedT(){return Math.floor(Date.now()/LMS)*LMS-LMS;}
 function save(){try{localStorage.setItem(KEY,JSON.stringify({cap:cap,pos:pos,ops:ops,wins:wins,dayKey:dayKey,dayPnl:dayPnl,trades:trades.slice(-40),lastReviewT:lastReviewT}));}catch(e){}}
 function load(){try{var s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&typeof s.cap==='number'){cap=s.cap;pos=s.pos||null;ops=s.ops||0;wins=s.wins||0;dayKey=s.dayKey||'';dayPnl=s.dayPnl||0;trades=s.trades||[];lastReviewT=s.lastReviewT||0;}}catch(e){}}
 function rollDay(){var k=dkey(Date.now());if(k!==dayKey){dayKey=k;dayPnl=0;save();}}
@@ -327,7 +327,7 @@ function simulate(cs,I,V,fgMap,T0,splitT){
   var n=cs.length,i0=WARM,i,c,s,d,ef,z,e,fgv,v,touched=false;
   while(i0<n&&cs[i0].t<T0)i0++;
   if(i0>=n)return null;
-  var cp=START_CAP,p=null,T=[],peak=START_CAP,mdd=0,dayLoss={},costs=0,inBars=0;
+  var cp=START_CAP,p=null,T=[],peak=START_CAP,mdd=0,dayLoss={},costs=0,inBars=0,xs=0,bs=[];
   var lastE=START_CAP,eSplit=null,bq=0,bPeak=START_CAP,bMdd=0,lastB=START_CAP,bSplit=null,bCost=0;
   function openAt(c,ef,qty,stop,tgt){
     var fin=FEE*qty*ef;
@@ -396,18 +396,22 @@ function simulate(cs,I,V,fgMap,T0,splitT){
     if(e>peak)peak=e;
     if((peak-e)/peak>mdd)mdd=(peak-e)/peak;
     lastE=e;
+    xs+=p?(p.qty*c.c)/e:0;
     /* comprar y mantener sobre la misma serie */
     if(i===i0){bq=START_CAP/(c.o*(1+SLIP)*(1+FEE));bCost=START_CAP-bq*c.o;}
     var be=bq*c.c;
     if(be>bPeak)bPeak=be;
     if((bPeak-be)/bPeak>bMdd)bMdd=(bPeak-be)/bPeak;
-    lastB=be;
+    lastB=be;bs.push(be/START_CAP);
   }
   if(eSplit===null){eSplit=lastE;bSplit=lastB;}
+  /* comprar y mantener solo con la misma fracción media de capital que usó la variante */
+  var fx=xs/(n-i0),xp=1,xm=0,q;
+  for(q=0;q<bs.length;q++){var xe=(1-fx)+fx*bs[q];if(xe>xp)xp=xe;if((xp-xe)/xp>xm)xm=(xp-xe)/xp;}
   var wins=0,nA=0,k;
   for(k=0;k<T.length;k++){if(T[k].pnl>0)wins++;if(T[k].t0<splitT)nA++;}
   return {from:cs[i0].t,to:cs[n-1].t,bars:n-i0,ret:lastE/START_CAP-1,mdd:mdd,n:T.length,wins:wins,nA:nA,nB:T.length-nA,
-    costs:costs,expo:inBars/(n-i0),segA:eSplit-START_CAP,segB:lastE-eSplit,open:!!p,T:T,
+    costs:costs,expo:inBars/(n-i0),expC:fx,bx:{ret:fx*(lastB/START_CAP-1),mdd:xm},segA:eSplit-START_CAP,segB:lastE-eSplit,open:!!p,T:T,
     bh:{ret:lastB/START_CAP-1,mdd:bMdd,segA:bSplit-START_CAP,segB:lastB-bSplit,cost:bCost}};
 }
 function judge(r){
@@ -454,7 +458,7 @@ function parseK(s,j){
 function tickerUrl(s){return s.kind==='bn'?s.base+'/api/v3/ticker/price?symbol=BTCUSDT':s.base+'/0/public/Ticker?pair=XBTUSD';}
 function parseT(s,j){if(s.kind==='bn')return +j.price;var key=Object.keys(j.result)[0];return +j.result[key].c[0];}
 function closedOnly(cs,ms){
-  var now=Date.now();ms=ms||TFMS;
+  var now=Date.now();ms=ms||LMS;
   cs=cs.filter(function(c){return c.t+ms<=now;});
   cs.sort(function(a,b){return a.t-b.t;});
   return cs;
@@ -472,14 +476,14 @@ async function connect(){
   for(var i=0;i<SOURCES.length;i++){
     var s=SOURCES[i];
     try{
-      var cs=parseK(s,await jget(klinesUrl(s,0,500),9000));
+      var cs=parseK(s,await jget(klinesUrl(s,0,500,'1d'),9000));
       if(cs.length<210)throw new Error('pocas velas');
       src=s;setCandles(cs);return true;
     }catch(e){}
   }
   return false;
 }
-async function refreshCandles(){setCandles(parseK(src,await jget(klinesUrl(src,0,500),9000)));}
+async function refreshCandles(){setCandles(parseK(src,await jget(klinesUrl(src,0,500,'1d'),9000)));}
 async function refreshFng(){
   try{
     var j=await jget('https://api.alternative.me/fng/?limit=1',8000);
@@ -508,7 +512,7 @@ function scanPos(){
   if(!pos||pendingExit)return;
   for(var i=0;i<candles.length;i++){
     var c=candles[i];
-    if(c.t+TFMS<=pos.t0)continue;
+    if(c.t+LMS<=pos.t0)continue;
     if(c.l<=pos.stop){pendingExit={level:pos.stop,reason:'stop'};return;}
     if(c.h>=pos.tgt){pendingExit={level:pos.tgt,reason:'objetivo'};return;}
   }
@@ -620,13 +624,13 @@ async function review(){
   if(!s)return;
   lastReviewT=candles[candles.length-1].t;save();
   var atr=s.atr;
-  await say(m,'Vela de 4 h cerrada. Reunión de mesa.',2400,true);
+  await say(m,'Vela diaria cerrada. Reunión de mesa.',2400,true);
   await Promise.all([go(m,'m0'),go(n,'m1'),go(l,'m2'),go(r,'m3'),go(d,'m4')]);
   await say(n,'BTC en '+fi(s.c)+': '+(s.trendUp?'tendencia alcista':'sin tendencia alcista')+'. RSI '+Math.round(s.rsi)+'.',3800,true);
   await say(l,fng?'Miedo y codicia: '+fng.v+' ('+fgLabel()+').':'Sin dato de sentimiento ahora.',3000,true);
-  await say(r,'Volatilidad '+pct1(s.atrPct)+'. '+(s.atrPct>0.04?'Demasiado alta.':'Riesgo aceptable.'),3400,true);
+  await say(r,'Volatilidad '+pct1(s.atrPct)+'. '+(s.atrPct>LIVE_ATR?'Demasiado alta.':'Riesgo aceptable.'),3400,true);
   rollDay();
-  var dec=decide(s,fng?fng.v:null,{inPos:!!pos,dayLossHit:dayPnl<=-0.03*START_CAP});
+  var dec=decide(s,fng?fng.v:null,{inPos:!!pos,dayLossHit:dayPnl<=-0.03*START_CAP},LIVE_ATR);
   if(pos){
     if(s.c<s.e50){
       pendingExit={level:price,reason:'tendencia'};
@@ -680,10 +684,10 @@ async function mainLoop(){
 function chatLines(id){
   var s=cur;
   if(!s)return ['Cargando datos del mercado…'];
-  if(id==='nova')return ['RSI '+Math.round(s.rsi)+' en velas de 4 h.','Media de 50 velas: '+fi(s.e50)+'.','Media de 200 velas: '+fi(s.e200)+'.'];
+  if(id==='nova')return ['RSI '+Math.round(s.rsi)+' en velas diarias.','Media de 50 velas: '+fi(s.e50)+'.','Media de 200 velas: '+fi(s.e200)+'.'];
   if(id==='lia')return fng?['Miedo y codicia: '+fng.v+'.','El mercado marca '+fgLabel()+'.']:['Sin dato de sentimiento ahora.'];
   if(id==='rex')return ['Volatilidad (ATR): '+pct1(s.atrPct)+'.',pos?'Vigilando el stop en '+fi(pos.stop)+'.':'Sin posición abierta.','Riesgo máximo por operación: 1 %.'];
-  if(id==='marta')return ['Capital ficticio: '+fe(equity())+'.','Operaciones cerradas: '+ops+'.','Próxima revisión a las '+hhmm(latestClosedT()+2*TFMS)+'.'];
+  if(id==='marta')return ['Capital ficticio: '+fe(equity())+'.','Operaciones cerradas: '+ops+'.','Próxima revisión a las '+hhmm(latestClosedT()+2*LMS)+'.'];
   return ['Comisión simulada: 0,1 % por lado.','Precio en vivo: '+fi(price)+'.','Deslizamiento simulado: 0,05 %.'];
 }
 async function ambient(){
@@ -740,6 +744,9 @@ function renderBt(o,srcName,hasFng){
     ['Ganadas',function(r){return '<td>'+(r.n?Math.round(r.wins/r.n*100)+' %':'—')+'</td>';},'<td>—</td>'],
     ['Costes (USDT)',function(r){return '<td>'+fi(r.costs)+'</td>';},bh?'<td>'+fi(bh.cost)+'</td>':'<td>—</td>'],
     ['Tiempo dentro',function(r){return '<td>'+Math.round(r.expo*100)+' %</td>';},'<td>100 %</td>'],
+    ['Capital medio en BTC',function(r){return '<td>'+pct1(r.expC)+'</td>';},'<td>100 %</td>'],
+    ['Comprar y mantener con ese capital medio: rendimiento',function(r){return '<td class="'+cls(r.bx.ret)+'">'+pct(r.bx.ret)+'</td>';},'<td>—</td>'],
+    ['Comprar y mantener con ese capital medio: caída máxima',function(r){return '<td>'+pct(-r.bx.mdd)+'</td>';},'<td>—</td>'],
     ['Dos primeros tercios (USDT)',function(r){return '<td class="'+cls(r.segA)+'">'+sgnInt(r.segA)+'</td>';},bh?'<td class="'+cls(bh.segA)+'">'+sgnInt(bh.segA)+'</td>':'<td>—</td>'],
     ['Último tercio (USDT)',function(r){return '<td class="'+cls(r.segB)+'">'+sgnInt(r.segB)+'</td>';},bh?'<td class="'+cls(bh.segB)+'">'+sgnInt(bh.segB)+'</td>':'<td>—</td>'],
     ['Criterio',function(r,V,j){return '<td><span class="pill '+(j.pass?'up':'down')+'">'+(j.pass?'Pasa':'No pasa')+'</span>'+(j.orient?'<span class="orient">orientativo</span>':'')+'</td>';},'<td>—</td>']
@@ -765,13 +772,13 @@ function renderBt(o,srcName,hasFng){
     return '<li>'+t+'</li>';
   });
   html+='<p class="headline">'+head+'</p><ul class="vd">'+lines.join('')+'</ul>';
-  if(!passed.length)html+='<p class="note">Con estos datos no hay una ventaja sencilla demostrada. La oficina sigue con las reglas de control solo como demostración.</p>';
-  else html+='<p class="note">Pasar el criterio en el pasado no garantiza nada en el futuro. Ninguna variante se aplica a la oficina en vivo sin tu visto bueno.</p>';
+  if(!passed.length)html+='<p class="note">Con estos datos no hay una ventaja sencilla demostrada. La oficina en vivo usa la variante Diaria solo como demostración.</p>';
+  else html+='<p class="note">Pasar el criterio en el pasado no garantiza nada en el futuro. La oficina en vivo usa la variante Diaria como prueba con dinero ficticio.</p>';
   var dRow=null;rows.forEach(function(row){if(row.V.tf==='1d'&&row.r&&!dRow)dRow=row.r;});
   var notes='Periodo común: '+dkey(o.T0)+' a '+dkey(o.T1-1)+'. Los tercios se cortan el '+dkey(o.splitT)+'. Fuente: '+srcName+' ('+fi(o.n4)+' velas de 4 h y '+fi(o.n1)+' diarias, incluidas 205 de calentamiento para las medias).';
   if(dRow&&dRow.from>o.T0+DAYMS)notes+=' La serie diaria solo llega desde el '+dkey(dRow.from)+', así que las variantes diarias se prueban en un periodo más corto.';
   if(bhR&&bhR.bars<4000)notes+=' La serie de 4 h es corta: el resultado es poco fiable.';
-  notes+=' Las señales se evalúan al cierre de cada vela y se ejecutan en la apertura de la siguiente. Si el precio abre más allá del stop o del objetivo, se ejecuta a la apertura; si una vela toca ambos, se asume el stop. Comisión del 0,1 % por lado y deslizamiento del 0,05 %, también en comprar y mantener (solo la compra). El stop móvil usa el ATR de cada vela y nunca baja. La caída máxima se mide con los cierres de cada vela, por eso cada variante se compara con comprar y mantener a su misma escala. Una posición abierta al final se valora al último cierre. '+(hasFng?'Se aplica el filtro de miedo y codicia.':'No se pudo cargar el miedo y codicia histórico, así que esta prueba no lo aplica.');
+  notes+=' Las señales se evalúan al cierre de cada vela y se ejecutan en la apertura de la siguiente. Si el precio abre más allá del stop o del objetivo, se ejecuta a la apertura; si una vela toca ambos, se asume el stop. Comisión del 0,1 % por lado y deslizamiento del 0,05 %, también en comprar y mantener (solo la compra). El stop móvil usa el ATR de cada vela y nunca baja. «Capital medio en BTC» es la media, vela a vela, del valor de la posición dividido entre el capital; la fila de comparación compra y mantiene solo esa fracción durante todo el periodo (el resto en efectivo), para ver cuánto del resultado se debe simplemente a arriesgar poco. La caída máxima se mide con los cierres de cada vela, por eso cada variante se compara con comprar y mantener a su misma escala. Una posición abierta al final se valora al último cierre. '+(hasFng?'Se aplica el filtro de miedo y codicia.':'No se pudo cargar el miedo y codicia histórico, así que esta prueba no lo aplica.');
   html+='<p class="note">'+notes+'</p>';
   return html;
 }
