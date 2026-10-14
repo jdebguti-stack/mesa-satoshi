@@ -1,1 +1,93 @@
-{"updated":null,"tracked":0,"last24h":0,"checkpoints":[],"latest":[]}
+{
+ "updated": 1791987011590,
+ "tracked": 30,
+ "last24h": 30,
+ "rules": {
+  "minLiq": 1000,
+  "deadDrop": 0.9
+ },
+ "checkpoints": [
+  {
+   "hours": 6,
+   "n": 0,
+   "dead": null,
+   "x2": null,
+   "medianChange": null,
+   "medianLiq": null
+  },
+  {
+   "hours": 24,
+   "n": 0,
+   "dead": null,
+   "x2": null,
+   "medianChange": null,
+   "medianLiq": null
+  },
+  {
+   "hours": 72,
+   "n": 0,
+   "dead": null,
+   "x2": null,
+   "medianChange": null,
+   "medianLiq": null
+  },
+  {
+   "hours": 168,
+   "n": 0,
+   "dead": null,
+   "x2": null,
+   "medianChange": null,
+   "medianLiq": null
+  }
+ ],
+ "latest": [
+  {
+   "name": "Ninku / SOL",
+   "first": 1791987011590,
+   "liq": 2928.76509876492,
+   "fdv": 3763.408849
+  },
+  {
+   "name": "BEZOS / AMZNx",
+   "first": 1791987011590,
+   "liq": 2552.47659599211,
+   "fdv": 3218.354049
+  },
+  {
+   "name": "CABRA / MSFTx",
+   "first": 1791987011590,
+   "liq": 2818.4309,
+   "fdv": 3513.620276
+  },
+  {
+   "name": "Sevda / SOL",
+   "first": 1791987011590,
+   "liq": 2548.6993,
+   "fdv": 6443.535866
+  },
+  {
+   "name": "PolarPine / SOL",
+   "first": 1791987011590,
+   "liq": 2359.68086389178,
+   "fdv": 2975.494727
+  },
+  {
+   "name": "BENCH / SOL",
+   "first": 1791987011590,
+   "liq": 2603.3435,
+   "fdv": 3278.651096
+  },
+  {
+   "name": "SLOPCORE / SOL",
+   "first": 1791987011590,
+   "liq": 2779.4032,
+   "fdv": 63407.97868
+  },
+  {
+   "name": "CABRA / MSFTx",
+   "first": 1791987011590,
+   "liq": 3031.9811,
+   "fdv": 3233.272009
+  }
+ ]
+}
