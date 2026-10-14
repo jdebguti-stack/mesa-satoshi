@@ -22,4 +22,6 @@ Oficina en pixel art donde cinco empleados virtuales operan Bitcoin con dinero f
   - Meta: ganar tras costes en entrenamiento, último tercio de BTC y ETH; caída máxima < 5 %; más de un 4 % al año; y al menos el 55 % de los días dentro con ganancia.
   - Simplificaciones y riesgos no simulados: se ignora la diferencia entre el precio de futuros y el de contado, se cobra la financiación del día entero, y no se recoge el riesgo de que el exchange quiebre o congele fondos.
 
+- Observatorio de memecoins (solo mira, no opera ni promociona): `scripts/collect.mjs` se ejecuta cada hora con GitHub Actions (`.github/workflows/memes.yml`, gratis en repos públicos) y apunta los pools nuevos de Solana de GeckoTerminal (API pública, sin clave) con al menos 1.000 USD de liquidez, hasta 40 por pasada. Mide su precio y liquidez a las 6 h, 1 día, 3 días y 7 días, incluidos los que desaparecen, y deja `data/memes/summary.json`, que la página muestra. Muerto = liquidez < 1.000 USD, precio 90 % o más por debajo del inicial, o pool desaparecido. El objetivo es juntar semanas de datos sin sesgo de supervivencia antes de preguntarse si existe alguna señal.
+
 No es asesoramiento financiero.

@@ -1,0 +1,25 @@
+name: Observatorio de memecoins
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: memes
+  cancel-in-progress: false
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/collect.mjs
+      - name: Guardar datos
+        run: |
+          git config user.name "observatorio"
+          git config user.email "observatorio@users.noreply.github.com"
+          git add data/memes
+          git diff --cached --quiet || (git commit -m "Observatorio: datos nuevos" && git pull --rebase -q && git push -q)

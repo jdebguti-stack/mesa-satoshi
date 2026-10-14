@@ -144,6 +144,12 @@ button:disabled{opacity:.6;cursor:default}
     <div id="fdRes"></div>
   </section>
 
+  <section>
+    <h2>Observatorio de memecoins</h2>
+    <p class="note">Aquí nadie opera ni promociona nada. Un proceso automático (GitHub Actions, gratis) apunta cada hora los pools nuevos de Solana con al menos 1.000 USD de liquidez y mira qué ha pasado con cada uno a las 6 horas, 1 día, 3 días y 7 días, incluidos los que desaparecen. Sirve para saber con datos reales, sin el sesgo de mirar solo a los que sobreviven, si existe alguna señal que valga la pena. Muerto significa liquidez por debajo de 1.000 USD, precio un 90 % o más por debajo del inicial, o pool desaparecido.</p>
+    <div id="mmRes"><p class="note">Cargando datos…</p></div>
+  </section>
+
   <p class="note">Las decisiones las toman reglas fijas (medias, RSI y volatilidad), no un modelo de IA. El dinero es ficticio y no hay ninguna conexión con cuentas ni órdenes reales. El capital y la posición se guardan en este navegador. Esto no es asesoramiento financiero.</p>
 </div>
 
@@ -1020,6 +1026,34 @@ async function runFd(){
   btn.disabled=false;
 }
 
+/* ---------- observatorio de memecoins (solo lee el resumen que deja el proceso automático) ---------- */
+function esc(x){return String(x===null||x===undefined?'':x).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function renderMemes(sm){
+  if(!sm||!sm.tracked)return '<p class="note">Todavía no hay datos. El proceso automático empieza a apuntar tokens en cuanto se activa en GitHub y deja el primer resumen en la primera hora; los resultados de 24 horas llegan al día siguiente.</p>';
+  var html='<p class="note">Última actualización: '+esc(sm.updated?new Date(sm.updated).toLocaleString('es-ES'):'—')+'. Tokens apuntados: <b>'+fi(sm.tracked)+'</b> ('+fi(sm.last24h)+' en las últimas 24 h).</p>';
+  var hs={6:'6 horas',24:'1 día',72:'3 días',168:'7 días'};
+  html+='<div class="tbl" role="region" aria-label="Qué pasa con los tokens nuevos" tabindex="0"><table><thead><tr><th scope="col">Tras</th><th scope="col">Tokens</th><th scope="col">Muertos</th><th scope="col">Se duplican</th><th scope="col">Cambio mediano</th></tr></thead><tbody>';
+  sm.checkpoints.forEach(function(c){
+    html+='<tr><th scope="row">'+esc(hs[c.hours]||c.hours+' h')+'</th><td>'+fi(c.n)+'</td><td>'+(c.n?Math.round(c.dead*100)+' %':'—')+'</td><td>'+(c.n?Math.round(c.x2*100)+' %':'—')+'</td><td class="'+(c.medianChange>0?'up':(c.medianChange<0?'down':''))+'">'+(c.medianChange===null?'—':pct(c.medianChange))+'</td></tr>';
+  });
+  html+='</tbody></table></div>';
+  if(sm.latest&&sm.latest.length){
+    html+='<p class="note"><b>Últimos tokens apuntados</b> (nombre y liquidez inicial en USD; solo como ejemplo, no son una recomendación):</p><ul class="vd">';
+    sm.latest.forEach(function(t){html+='<li>'+esc(t.name)+': '+fi(t.liq)+' USD</li>';});
+    html+='</ul>';
+  }
+  html+='<p class="note">«Cambio mediano» es el cambio de precio respecto al primer registro, que ya ocurre algún minuto después de crearse el pool: es lo que podría haber comprado alguien normal, no un bot. Con pocos datos todo esto es ruido; hacen falta semanas.</p>';
+  return html;
+}
+async function loadMemes(){
+  var el=document.getElementById('mmRes');
+  try{
+    var r=await fetch('data/memes/summary.json?'+Date.now());
+    if(!r.ok)throw new Error('http '+r.status);
+    el.innerHTML=renderMemes(await r.json());
+  }catch(e){el.innerHTML='<p class="note">Todavía no hay datos del observatorio.</p>';}
+}
+
 /* ---------- dibujo del fondo ---------- */
 function plant(g,x,y){
   R(g,x-5,y-7,10,7,'#a2573a');R(g,x-5,y-7,10,1,'#c27050');
@@ -1289,6 +1323,7 @@ document.getElementById('meet').addEventListener('click',function(){
 });
 document.getElementById('btBtn').addEventListener('click',runBt);
 document.getElementById('fdBtn').addEventListener('click',runFd);
+loadMemes();
 setInterval(function(){eq.push(equity());if(eq.length>48)eq.shift();},10000);
 
 drawBg();
