@@ -66,6 +66,23 @@ ul,ol{list-style:none;margin:0;padding:0}
 #btRes{margin-top:12px}
 #btRes .note{margin-top:10px}
 button:disabled{opacity:.6;cursor:default}
+.callout{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:13px;line-height:1.45}
+.callout b{font-weight:600;color:var(--down)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel);-webkit-overflow-scrolling:touch}
+.tbl:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tbl table{border-collapse:collapse;width:100%;font:400 12px/1.35 var(--font-data);font-variant-numeric:tabular-nums}
+.tbl th,.tbl td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+.tbl thead th{font:600 11px/1.25 var(--font-body);color:var(--muted);vertical-align:bottom;white-space:normal;min-width:72px}
+.tbl thead th:first-child,.tbl tbody th{position:sticky;left:0;z-index:1;background:var(--panel);text-align:left;box-shadow:1px 0 0 var(--line)}
+.tbl tbody th{font:400 12px/1.3 var(--font-body);color:var(--muted);white-space:normal;min-width:118px;max-width:140px}
+.tbl tbody tr:last-child th,.tbl tbody tr:last-child td{border-bottom:0}
+.tbl .bhc,.tbl td[data-bh]{border-left:1px solid var(--line);color:var(--muted)}
+.tbl td.up{color:var(--up)}
+.tbl td.down{color:var(--down)}
+.pill{display:inline-block;font:600 11px/1 var(--font-body);padding:3px 7px;border-radius:999px;border:1px solid currentColor}
+.orient{display:block;margin-top:3px;font:400 10px var(--font-body);color:var(--muted)}
+.headline{margin:12px 0 0;font-size:14px;font-weight:600}
+.swipe{margin:0 0 6px}
 </style>
 
 <div class="wrap">
@@ -82,6 +99,8 @@ button:disabled{opacity:.6;cursor:default}
   </div>
 
   <p class="srcline"><i class="dot" id="dot"></i><span id="src">Conectando con el mercado…</span></p>
+
+  <p class="callout"><b>Sin ventaja demostrada.</b> Las reglas que usa ahora la oficina perdieron dinero en la prueba con 3 años de datos y quedaron muy por debajo de comprar y mantener. Tómalo como una demostración, no como una forma de ganar dinero.</p>
 
   <div class="bar">
     <button id="meet" type="button">Convocar reunión</button>
@@ -107,9 +126,9 @@ button:disabled{opacity:.6;cursor:default}
 
   <section>
     <h2>Prueba con datos pasados</h2>
-    <p class="note">Aplica las mismas reglas de la oficina a hasta 3 años de velas de 4 horas, con comisiones y deslizamiento. Las reglas se fijaron antes de ver los datos y no se han optimizado.</p>
+    <p class="note">Compara 4 variantes de reglas con hasta 3 años de datos, comisiones y deslizamiento: control (las de la oficina), diaria, stop móvil y tendencia lenta. Las variantes y el criterio se fijaron antes de ver los resultados. Una variante pasa solo si gana dinero en los dos primeros tercios del periodo, sigue ganando en el último y cae menos que comprar y mantener.</p>
     <div class="bar">
-      <button id="btBtn" type="button">Probar reglas</button>
+      <button id="btBtn" type="button">Probar variantes</button>
       <span class="hint" id="btProg"></span>
     </div>
     <div id="btRes"></div>
@@ -280,73 +299,134 @@ function sigAt(I,i){
   if(e50===null||e200===null||r===null||a===null||c===undefined)return null;
   return {c:c,e50:e50,e200:e200,rsi:r,atr:a,atrPct:a/c,trendUp:(c>e50&&e50>e200),rsiOk:(r>50&&r<72)};
 }
-function decide(s,fgv,st){
+function decide(s,fgv,st,atrMax){
   if(st.inPos)return {go:false,why:'ya hay posición abierta'};
   if(!s.trendUp)return {go:false,why:'la tendencia no es alcista'};
   if(!s.rsiOk)return {go:false,why:'el RSI está fuera de zona (50 a 72)'};
   if(fgv!==null&&fgv>=80)return {go:false,why:'hay codicia extrema en el mercado'};
-  if(s.atrPct>0.04)return {go:false,why:'la volatilidad es demasiado alta'};
+  if(s.atrPct>(atrMax||0.04))return {go:false,why:'la volatilidad es demasiado alta'};
   if(st.dayLossHit)return {go:false,why:'se alcanzó el límite de pérdida diaria'};
   return {go:true,why:''};
 }
-function sizing(capNow,entry,atr){
-  var stopDist=2*atr,qty=(capNow*0.01)/stopDist,size=qty*entry,maxS=capNow*0.5;
+function sizing(capNow,entry,atr,stopM,tgtM,maxF){
+  stopM=stopM||2;if(tgtM===undefined)tgtM=3;maxF=maxF||0.5;
+  var stopDist=stopM*atr,qty=(capNow*0.01)/stopDist,size=qty*entry,maxS=capNow*maxF;
   if(size>maxS){size=maxS;qty=size/entry;}
-  return {qty:qty,size:size,stop:entry-stopDist,tgt:entry+3*atr};
+  return {qty:qty,size:size,stop:entry-stopDist,tgt:tgtM===null?null:entry+tgtM*atr};
 }
 
-/* ---------- prueba con datos pasados ---------- */
-function backtest(cs,fgMap){
-  var I=ind(cs),n=cs.length,cp=START_CAP,p=null,T=[],peak=START_CAP,mdd=0,dayLoss={},i,c,s,d,ef,z,ex,why,pnl,e,dd,fgv,dl,dk;
-  var warm=205;
-  for(i=warm;i<n;i++){
+/* ---------- prueba con datos pasados: variantes fijadas antes de ver resultados ---------- */
+var DAYMS=86400000,WARM=205;
+var VARIANTS=[
+  {id:'ctl',name:'Control',tf:'4h',kind:'rules',atrMax:0.04,stopM:2,tgtM:3,maxF:0.5,emaExit:true,trail:false},
+  {id:'day',name:'Diaria',tf:'1d',kind:'rules',atrMax:0.06,stopM:2,tgtM:3,maxF:0.5,emaExit:true,trail:false},
+  {id:'trl',name:'Stop móvil',tf:'4h',kind:'rules',atrMax:0.04,stopM:3,tgtM:null,maxF:0.5,emaExit:false,trail:true},
+  {id:'ema',name:'Tendencia lenta',tf:'1d',kind:'ema200'}
+];
+function simulate(cs,I,V,fgMap,T0,splitT){
+  var n=cs.length,i0=WARM,i,c,s,d,ef,z,e,fgv,v,touched=false;
+  while(i0<n&&cs[i0].t<T0)i0++;
+  if(i0>=n)return null;
+  var cp=START_CAP,p=null,T=[],peak=START_CAP,mdd=0,dayLoss={},costs=0,inBars=0;
+  var lastE=START_CAP,eSplit=null,bq=0,bPeak=START_CAP,bMdd=0,lastB=START_CAP,bSplit=null,bCost=0;
+  function openAt(c,ef,qty,stop,tgt){
+    var fin=FEE*qty*ef;
+    costs+=fin+qty*(ef-c.o);
+    cp-=fin;
+    p={entry:ef,qty:qty,stop:stop,tgt:tgt,t0:c.t,fin:fin,hc:-Infinity,exitNext:false,exitWhy:''};
+    touched=true;
+  }
+  function exitAt(level,why,t){
+    var ex=level*(1-SLIP),fout=FEE*p.qty*ex,pnl,dk;
+    costs+=fout+p.qty*(level-ex);
+    cp+=p.qty*(ex-p.entry)-fout;
+    pnl=p.qty*(ex-p.entry)-p.fin-fout;
+    dk=dkey(t);dayLoss[dk]=(dayLoss[dk]||0)+pnl;
+    T.push({t0:p.t0,t1:t,entry:p.entry,exit:ex,pnl:pnl,why:why});
+    p=null;
+  }
+  for(i=i0;i<n;i++){
     c=cs[i];
+    if(eSplit===null&&c.t>=splitT){eSplit=lastE;bSplit=lastB;}
+    touched=!!p;
+    /* salida decidida al cierre anterior: se ejecuta en esta apertura */
+    if(p&&p.exitNext)exitAt(c.o,p.exitWhy,c.t);
+    /* entrada: señal al cierre anterior, ejecución en esta apertura */
     if(!p){
-      s=sigAt(I,i-1);
-      if(s){
-        fgv=null;
-        if(fgMap){var v=fgMap[dkey(cs[i-1].t)];if(v!==undefined)fgv=v;}
-        dl=(dayLoss[dkey(c.t)]||0)<=-0.03*START_CAP;
-        d=decide(s,fgv,{inPos:false,dayLossHit:dl});
-        if(d.go){ef=c.o*(1+SLIP);z=sizing(cp,ef,s.atr);p={entry:ef,qty:z.qty,size:z.size,stop:z.stop,tgt:z.tgt,t0:c.t};}
+      if(V.kind==='ema200'){
+        if(I.e200[i-1]!==null&&I.c[i-1]>I.e200[i-1]){
+          ef=c.o*(1+SLIP);
+          openAt(c,ef,cp/(ef*(1+FEE)),null,null);
+        }
+      }else{
+        s=sigAt(I,i-1);
+        if(s){
+          fgv=null;
+          if(fgMap){v=fgMap[dkey(cs[i-1].t)];if(v!==undefined)fgv=v;}
+          d=decide(s,fgv,{inPos:false,dayLossHit:(dayLoss[dkey(c.t)]||0)<=-0.03*START_CAP},V.atrMax);
+          if(d.go){
+            ef=c.o*(1+SLIP);z=sizing(cp,ef,s.atr,V.stopM,V.tgtM,V.maxF);
+            openAt(c,ef,z.qty,z.stop,z.tgt);
+          }
+        }
       }
     }
+    /* stop y objetivo dentro de la vela; si abre más allá, se ejecuta en la apertura */
+    if(p&&V.kind==='rules'){
+      if(c.o<=p.stop)exitAt(c.o,'stop',c.t);
+      else if(p.tgt!==null&&c.o>=p.tgt)exitAt(c.o,'objetivo',c.t);
+      else if(c.l<=p.stop)exitAt(p.stop,'stop',c.t);
+      else if(p.tgt!==null&&c.h>=p.tgt)exitAt(p.tgt,'objetivo',c.t);
+    }
+    /* decisiones al cierre de la vela */
     if(p){
-      ex=null;why='';
-      if(c.l<=p.stop){ex=p.stop*(1-SLIP);why='stop';}
-      else if(c.h>=p.tgt){ex=p.tgt*(1-SLIP);why='objetivo';}
-      else if(c.c<I.e50[i]){ex=c.c*(1-SLIP);why='tendencia';}
-      if(ex!==null){
-        pnl=p.qty*(ex-p.entry)-FEE*(p.qty*p.entry+p.qty*ex);
-        cp+=pnl;dk=dkey(c.t);dayLoss[dk]=(dayLoss[dk]||0)+pnl;
-        T.push({t0:p.t0,t1:c.t,entry:p.entry,exit:ex,pnl:pnl,why:why});
-        p=null;
+      if(V.kind==='ema200'){
+        if(I.e200[i]!==null&&c.c<I.e200[i]){p.exitNext=true;p.exitWhy='tendencia';}
+      }else{
+        if(V.emaExit&&I.e50[i]!==null&&c.c<I.e50[i]){p.exitNext=true;p.exitWhy='tendencia';}
+        if(V.trail){
+          if(c.c>p.hc)p.hc=c.c;
+          var ns=p.hc-V.stopM*I.atr[i];
+          if(ns>p.stop)p.stop=ns;
+        }
       }
     }
+    if(touched||p)inBars++;
     e=cp+(p?p.qty*(c.c-p.entry):0);
     if(e>peak)peak=e;
-    dd=(peak-e)/peak;if(dd>mdd)mdd=dd;
+    if((peak-e)/peak>mdd)mdd=(peak-e)/peak;
+    lastE=e;
+    /* comprar y mantener sobre la misma serie */
+    if(i===i0){bq=START_CAP/(c.o*(1+SLIP)*(1+FEE));bCost=START_CAP-bq*c.o;}
+    var be=bq*c.c;
+    if(be>bPeak)bPeak=be;
+    if((bPeak-be)/bPeak>bMdd)bMdd=(bPeak-be)/bPeak;
+    lastB=be;
   }
-  return {T:T,final:cp,mdd:mdd,bh:cs[n-1].c/cs[warm].c-1,from:cs[warm].t,to:cs[n-1].t,splitT:cs[Math.floor(warm+(n-warm)*2/3)].t,n:n-warm};
+  if(eSplit===null){eSplit=lastE;bSplit=lastB;}
+  var wins=0,nA=0,k;
+  for(k=0;k<T.length;k++){if(T[k].pnl>0)wins++;if(T[k].t0<splitT)nA++;}
+  return {from:cs[i0].t,to:cs[n-1].t,bars:n-i0,ret:lastE/START_CAP-1,mdd:mdd,n:T.length,wins:wins,nA:nA,nB:T.length-nA,
+    costs:costs,expo:inBars/(n-i0),segA:eSplit-START_CAP,segB:lastE-eSplit,open:!!p,T:T,
+    bh:{ret:lastB/START_CAP-1,mdd:bMdd,segA:bSplit-START_CAP,segB:lastB-bSplit,cost:bCost}};
 }
-function summarize(R,srcName){
-  var T=R.T,w=0,gw=0,gl=0,i,a=[0,0,0],b=[0,0,0];
-  for(i=0;i<T.length;i++){
-    if(T[i].pnl>0){w++;gw+=T[i].pnl;}else gl+=-T[i].pnl;
-    var g=T[i].t0<R.splitT?a:b;g[0]++;g[1]+=T[i].pnl;if(T[i].pnl>0)g[2]++;
-  }
-  var ret=R.final/START_CAP-1,v=[];
-  if(!T.length)v.push('Las reglas no abrieron ninguna operación en este periodo.');
-  else{
-    if(T.length<30)v.push('Solo '+T.length+' operaciones: no hay muestra suficiente para concluir nada.');
-    if(ret<=0)v.push('Las reglas pierden dinero en este periodo, ya con comisiones.');
-    else if(ret<R.bh)v.push('Ganan menos que comprar BTC y mantenerlo ('+pct(R.bh)+').');
-    else v.push('Ganan más que comprar y mantener, pero un resultado pasado no garantiza el futuro.');
-    if(b[0]>=5&&b[1]<=0)v.push('En el último tercio del periodo, que hace de prueba, pierden. Mala señal: la ventaja podría ser casualidad.');
-    if(R.mdd>0.25)v.push('La caída máxima supera el 25 %: difícil de aguantar.');
-  }
-  return {ret:ret,bh:R.bh,mdd:R.mdd,n:T.length,win:T.length?w/T.length:0,pf:gl>0?gw/gl:null,a:a,b:b,verdict:v,
-    period:dkey(R.from)+' a '+dkey(R.to),candles:R.n,src:srcName};
+function judge(r){
+  var why=[];
+  if(r.n===0&&!r.open)why.push('no abre ninguna operación');
+  if(!(r.segA>0))why.push('no gana dinero en los dos primeros tercios');
+  if(!(r.segB>0))why.push('no gana dinero en el último tercio');
+  if(!(r.mdd<r.bh.mdd))why.push('su caída máxima ('+pct(-r.mdd)+') no es menor que la de comprar y mantener ('+pct(-r.bh.mdd)+')');
+  return {pass:why.length===0,why:why,orient:r.n<30};
+}
+function runAll(c4,c1,fm){
+  var T0=c4[Math.min(WARM,c4.length-1)].t,T1=c4[c4.length-1].t+TFMS,splitT=T0+Math.round((T1-T0)*2/3);
+  var I4=ind(c4),I1=(c1&&c1.length>WARM+1)?ind(c1):null;
+  var rows=VARIANTS.map(function(V){
+    var daily=V.tf==='1d',cs=daily?c1:c4,I=daily?I1:I4;
+    var r=(cs&&I)?simulate(cs,I,V,fm,T0,splitT):null;
+    return {V:V,r:r,j:r?judge(r):null};
+  });
+  return {rows:rows,T0:T0,T1:T1,splitT:splitT,n4:c4.length,n1:c1?c1.length:0};
 }
 
 /* ---------- fuentes de datos ---------- */
@@ -361,9 +441,10 @@ function jget(url,ms){
   return fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){clearTimeout(t);if(!r.ok)throw new Error('http '+r.status);return r.json();});
 }
 function sleepReal(ms){return new Promise(function(r){setTimeout(r,ms);});}
-function klinesUrl(s,end,limit){
-  if(s.kind==='bn')return s.base+'/api/v3/klines?symbol=BTCUSDT&interval=4h&limit='+(limit||500)+(end?'&endTime='+end:'');
-  return s.base+'/0/public/OHLC?pair=XBTUSD&interval=240';
+function klinesUrl(s,end,limit,tf){
+  tf=tf||'4h';
+  if(s.kind==='bn')return s.base+'/api/v3/klines?symbol=BTCUSDT&interval='+tf+'&limit='+(limit||500)+(end?'&endTime='+end:'');
+  return s.base+'/0/public/OHLC?pair=XBTUSD&interval='+(tf==='1d'?1440:240);
 }
 function parseK(s,j){
   if(s.kind==='bn')return j.map(function(r){return {t:r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]};});
@@ -372,9 +453,9 @@ function parseK(s,j){
 }
 function tickerUrl(s){return s.kind==='bn'?s.base+'/api/v3/ticker/price?symbol=BTCUSDT':s.base+'/0/public/Ticker?pair=XBTUSD';}
 function parseT(s,j){if(s.kind==='bn')return +j.price;var key=Object.keys(j.result)[0];return +j.result[key].c[0];}
-function closedOnly(cs){
-  var now=Date.now();
-  cs=cs.filter(function(c){return c.t+TFMS<=now;});
+function closedOnly(cs,ms){
+  var now=Date.now();ms=ms||TFMS;
+  cs=cs.filter(function(c){return c.t+ms<=now;});
   cs.sort(function(a,b){return a.t-b.t;});
   return cs;
 }
@@ -618,23 +699,23 @@ async function ambient(){
 }
 
 /* ---------- prueba con datos pasados (interfaz) ---------- */
-async function fetchDeep(prog){
-  var s=src,all=[],end=0,req=0,target=6570+210;
+async function fetchSeries(tf,count,prog,label){
+  var s=src,all=[],end=0,req=0,ms=tf==='1d'?DAYMS:TFMS;
   if(s.kind==='bn'){
-    while(all.length<target&&req<10){
-      var cs=parseK(s,await jget(klinesUrl(s,end,1000),12000));
+    while(all.length<count+2&&req<10){
+      var cs=parseK(s,await jget(klinesUrl(s,end,1000,tf),12000));
       if(!cs.length)break;
       all=cs.concat(all);end=cs[0].t-1;req++;
-      prog('Descargando velas: '+all.length+'…');
+      prog('Descargando velas '+label+': '+all.length+'…');
       await sleepReal(150);
+      if(cs.length<1000)break;
     }
   }else{
-    all=parseK(s,await jget(klinesUrl(s,0),12000));
+    all=parseK(s,await jget(klinesUrl(s,0,0,tf),12000));
   }
   var seen={},out=[];
   all.forEach(function(c){if(!seen[c.t]){seen[c.t]=1;out.push(c);}});
-  out=closedOnly(out);
-  return out.slice(-6780);
+  return closedOnly(out,ms).slice(-count);
 }
 async function fetchFngMap(){
   try{
@@ -643,29 +724,72 @@ async function fetchFngMap(){
     return m;
   }catch(e){return null;}
 }
-function statCard(label,val,cls){return '<div class="stat"><span class="l">'+label+'</span><strong class="'+(cls||'')+'">'+val+'</strong></div>';}
+function sgnInt(n){var r=Math.round(n);return (r>0?'+':'')+fi(r);}
+function cls(x){return x>0?'up':(x<0?'down':'');}
+function renderBt(o,srcName,hasFng){
+  var rows=o.rows,bhR=null,k;
+  for(k=0;k<rows.length;k++)if(rows[k].r&&rows[k].V.tf==='4h'){bhR=rows[k].r;break;}
+  var bh=bhR?bhR.bh:null;
+  function cell(row,f){return row.r?f(row.r,row.V,row.j):'<td>Sin datos</td>';}
+  var M=[
+    ['Velas',function(r,V){return '<td>'+fi(r.bars)+' · '+(V.tf==='1d'?'1 día':'4 h')+'</td>';},bhR?'<td>'+fi(bhR.bars)+' · 4 h</td>':'<td>—</td>'],
+    ['Rendimiento',function(r){return '<td class="'+cls(r.ret)+'">'+pct(r.ret)+'</td>';},bh?'<td class="'+cls(bh.ret)+'">'+pct(bh.ret)+'</td>':'<td>—</td>'],
+    ['Caída máxima',function(r){return '<td class="down">'+pct(-r.mdd)+'</td>';},bh?'<td class="down">'+pct(-bh.mdd)+'</td>':'<td>—</td>'],
+    ['Caída de comprar y mantener a la misma escala',function(r){return '<td>'+pct(-r.bh.mdd)+'</td>';},'<td>—</td>'],
+    ['Operaciones',function(r){return '<td>'+r.n+(r.open?' (+1 abierta)':'')+'</td>';},'<td>1 compra</td>'],
+    ['Ganadas',function(r){return '<td>'+(r.n?Math.round(r.wins/r.n*100)+' %':'—')+'</td>';},'<td>—</td>'],
+    ['Costes (USDT)',function(r){return '<td>'+fi(r.costs)+'</td>';},bh?'<td>'+fi(bh.cost)+'</td>':'<td>—</td>'],
+    ['Tiempo dentro',function(r){return '<td>'+Math.round(r.expo*100)+' %</td>';},'<td>100 %</td>'],
+    ['Dos primeros tercios (USDT)',function(r){return '<td class="'+cls(r.segA)+'">'+sgnInt(r.segA)+'</td>';},bh?'<td class="'+cls(bh.segA)+'">'+sgnInt(bh.segA)+'</td>':'<td>—</td>'],
+    ['Último tercio (USDT)',function(r){return '<td class="'+cls(r.segB)+'">'+sgnInt(r.segB)+'</td>';},bh?'<td class="'+cls(bh.segB)+'">'+sgnInt(bh.segB)+'</td>':'<td>—</td>'],
+    ['Criterio',function(r,V,j){return '<td><span class="pill '+(j.pass?'up':'down')+'">'+(j.pass?'Pasa':'No pasa')+'</span>'+(j.orient?'<span class="orient">orientativo</span>':'')+'</td>';},'<td>—</td>']
+  ];
+  var html='<p class="hint swipe">Desliza la tabla hacia la izquierda para ver las 4 variantes y comprar y mantener.</p><div class="tbl" role="region" aria-label="Comparación de variantes" tabindex="0"><table><thead><tr><th scope="col">Importes en USDT</th>';
+  rows.forEach(function(row){html+='<th scope="col">'+row.V.name+'</th>';});
+  html+='<th scope="col" class="bhc">Comprar y mantener</th></tr></thead><tbody>';
+  M.forEach(function(m){
+    html+='<tr><th scope="row">'+m[0]+'</th>';
+    rows.forEach(function(row){html+=cell(row,m[1]);});
+    html+=m[2].replace('<td','<td data-bh="1"')+'</tr>';
+  });
+  html+='</tbody></table></div>';
+  var passed=rows.filter(function(row){return row.j&&row.j.pass;});
+  var head=passed.length?'Pasan el criterio: '+passed.map(function(row){return row.V.name;}).join(', ')+'.':'Ninguna variante pasa el criterio.';
+  var lines=rows.map(function(row){
+    var V=row.V,r=row.r,j=row.j;
+    if(!r)return '<li><b>'+V.name+'</b>: sin datos suficientes para probarla.</li>';
+    var t='<b>'+V.name+'</b>: ';
+    if(j.pass)t+='pasa. Rinde '+pct(r.ret)+' frente al '+pct(r.bh.ret)+' de comprar y mantener, con una caída máxima de '+pct(-r.mdd)+' frente a '+pct(-r.bh.mdd)+'.';
+    else t+='no pasa: '+j.why.join('; ')+'.';
+    if(j.orient)t+=' Resultado orientativo: solo '+r.n+' operaciones.';
+    return '<li>'+t+'</li>';
+  });
+  html+='<p class="headline">'+head+'</p><ul class="vd">'+lines.join('')+'</ul>';
+  if(!passed.length)html+='<p class="note">Con estos datos no hay una ventaja sencilla demostrada. La oficina sigue con las reglas de control solo como demostración.</p>';
+  else html+='<p class="note">Pasar el criterio en el pasado no garantiza nada en el futuro. Ninguna variante se aplica a la oficina en vivo sin tu visto bueno.</p>';
+  var dRow=null;rows.forEach(function(row){if(row.V.tf==='1d'&&row.r&&!dRow)dRow=row.r;});
+  var notes='Periodo común: '+dkey(o.T0)+' a '+dkey(o.T1-1)+'. Los tercios se cortan el '+dkey(o.splitT)+'. Fuente: '+srcName+' ('+fi(o.n4)+' velas de 4 h y '+fi(o.n1)+' diarias, incluidas 205 de calentamiento para las medias).';
+  if(dRow&&dRow.from>o.T0+DAYMS)notes+=' La serie diaria solo llega desde el '+dkey(dRow.from)+', así que las variantes diarias se prueban en un periodo más corto.';
+  if(bhR&&bhR.bars<4000)notes+=' La serie de 4 h es corta: el resultado es poco fiable.';
+  notes+=' Las señales se evalúan al cierre de cada vela y se ejecutan en la apertura de la siguiente. Si el precio abre más allá del stop o del objetivo, se ejecuta a la apertura; si una vela toca ambos, se asume el stop. Comisión del 0,1 % por lado y deslizamiento del 0,05 %, también en comprar y mantener (solo la compra). El stop móvil usa el ATR de cada vela y nunca baja. La caída máxima se mide con los cierres de cada vela, por eso cada variante se compara con comprar y mantener a su misma escala. Una posición abierta al final se valora al último cierre. '+(hasFng?'Se aplica el filtro de miedo y codicia.':'No se pudo cargar el miedo y codicia histórico, así que esta prueba no lo aplica.');
+  html+='<p class="note">'+notes+'</p>';
+  return html;
+}
 async function runBt(){
   var btn=document.getElementById('btBtn'),pr=document.getElementById('btProg'),res=document.getElementById('btRes');
   if(!src){pr.textContent='Todavía no hay conexión con el mercado.';return;}
   btn.disabled=true;res.innerHTML='';
   function prog(t){pr.textContent=t;}
   try{
-    prog('Descargando velas…');
-    var cs=await fetchDeep(prog);
-    if(cs.length<400){prog('Esta fuente solo da '+cs.length+' velas: no basta para una prueba seria.');btn.disabled=false;return;}
-    prog('Descargando sentimiento histórico…');
+    var c4=await fetchSeries('4h',6575+WARM,prog,'de 4 h');
+    if(c4.length<400){prog('Esta fuente solo da '+c4.length+' velas de 4 h: no basta para una prueba seria.');btn.disabled=false;return;}
+    var T0=c4[Math.min(WARM,c4.length-1)].t,c1=null;
+    try{c1=await fetchSeries('1d',Math.ceil((Date.now()-T0)/DAYMS)+WARM+10,prog,'diarias');}catch(e){c1=null;}
+    prog('Descargando miedo y codicia histórico…');
     var fm=await fetchFngMap();
     prog('Calculando…');
     await sleepReal(30);
-    var R=summarize(backtest(cs,fm),src.id);
-    var html='<div class="stats">'+
-      statCard('Rendimiento',pct(R.ret),R.ret>=0?'up':'down')+
-      statCard('Comprar y mantener',pct(R.bh),'')+
-      statCard('Caída máxima',pct(-R.mdd),'down')+
-      statCard('Operaciones',R.n+' · '+Math.round(R.win*100)+' % ganadas','')+
-      '</div><ul class="vd">'+R.verdict.map(function(t){return '<li>'+t+'</li>';}).join('')+'</ul>';
-    html+='<p class="note">Periodo: '+R.period+' ('+R.candles+' velas de 4 h, fuente '+R.src+'). Primeros dos tercios: '+R.a[0]+' operaciones, '+(R.a[1]>=0?'+':'')+fe(R.a[1])+'. Último tercio: '+R.b[0]+' operaciones, '+(R.b[1]>=0?'+':'')+fe(R.b[1])+'. Incluye comisión del 0,1 % por lado y deslizamiento del 0,05 %. '+(fm?'Aplica el filtro de sentimiento.':'No se pudo cargar el sentimiento histórico, así que esta prueba lo ignora.')+' Si una vela toca a la vez el stop y el objetivo, se asume que salta el stop.</p>';
-    res.innerHTML=html;prog('');
+    res.innerHTML=renderBt(runAll(c4,c1,fm),src.id,!!fm);prog('');
   }catch(e){prog('No se pudo completar la prueba: '+(e&&e.message?e.message:'error de red')+'.');}
   btn.disabled=false;
 }
