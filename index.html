@@ -126,7 +126,7 @@ button:disabled{opacity:.6;cursor:default}
 
   <section>
     <h2>Prueba con datos pasados</h2>
-    <p class="note">Compara 8 variantes de la regla Diaria con hasta 3 años de datos, comisiones y deslizamiento: la propia Diaria, quitar una pieza de Lia, Nova, Rex o Marta, y tres versiones más estrictas. Se elige una solo con los dos primeros tercios y el último tercio se mira una vez, solo para la elegida. Meta: ganar dinero tras comisiones, pasar el criterio (gana en todo el periodo y cae menos que comprar y mantener) y acertar al menos el 55 % de las operaciones; el 70 % es un extra.</p>
+    <p class="note">Compara 8 variantes de dos familias nuevas con unos 3 años de velas diarias, comisiones y deslizamiento: A, comprar caídas fuertes dentro de una tendencia alcista y vender al rebote; B, comprar cuando el precio rompe máximos y vender cuando rompe mínimos. También compara el tamaño de posición nuevo, ajustado a la volatilidad, con el antiguo. Se elige una solo con los dos primeros tercios de BTC y se examina una vez con el último tercio de BTC y con ETH. Meta: ganar dinero tras comisiones, caer menos que comprar y mantener y acertar al menos el 55 %; el 70 % es un extra. La oficina en vivo no cambia.</p>
     <div class="bar">
       <button id="btBtn" type="button">Probar variantes</button>
       <span class="hint" id="btProg"></span>
@@ -318,27 +318,38 @@ function sizing(capNow,entry,atr,stopM,tgtM,maxF){
 
 /* ---------- prueba con datos pasados: variantes fijadas antes de ver resultados ---------- */
 var DAYMS=86400000,WARM=205;
+/* Familia A: rebote en tendencia. Familia B: ruptura de máximos.
+   Tamaño «vol»: la posición se ajusta para que un día normal (1 ATR) mueva como mucho un 2 % del capital, con un máximo del 100 %.
+   Tamaño «risk»: el antiguo, 1 % de riesgo hasta el stop y como mucho el 50 % del capital. */
+var VOLT=0.02,MINTR=10;
 var VARIANTS=[
-  {id:'base',name:'Diaria',kind:'rules',tf:'1d',atrMax:0.06,stopM:2,tgtM:3,maxF:0.5,emaExit:true,trail:false},
-  {id:'nolia',name:'Sin Lia',kind:'rules',tf:'1d',atrMax:0.06,stopM:2,tgtM:3,maxF:0.5,emaExit:true,trail:false,noFg:true},
-  {id:'nonova',name:'Sin RSI de Nova',kind:'rules',tf:'1d',atrMax:0.06,stopM:2,tgtM:3,maxF:0.5,emaExit:true,trail:false,rsiOff:true},
-  {id:'norex',name:'Sin filtro de Rex',kind:'rules',tf:'1d',atrMax:Infinity,stopM:2,tgtM:3,maxF:0.5,emaExit:true,trail:false},
-  {id:'noexit',name:'Sin salida de Marta',kind:'rules',tf:'1d',atrMax:0.06,stopM:2,tgtM:3,maxF:0.5,emaExit:false,trail:false},
-  {id:'lia70',name:'Lia estricta',kind:'rules',tf:'1d',atrMax:0.06,stopM:2,tgtM:3,maxF:0.5,emaExit:true,trail:false,fgMax:70},
-  {id:'rex4',name:'Rex estricto',kind:'rules',tf:'1d',atrMax:0.04,stopM:2,tgtM:3,maxF:0.5,emaExit:true,trail:false},
-  {id:'tgt2',name:'Objetivo 2 ATR',kind:'rules',tf:'1d',atrMax:0.06,stopM:2,tgtM:2,maxF:0.5,emaExit:true,trail:false}
+  {id:'a1',fam:'A',name:'Rebote',kind:'dip',rsiIn:10,rsiOut:70,maxDays:10,stopM:3,size:'vol'},
+  {id:'a2',fam:'A',name:'Rebote profundo',kind:'dip',rsiIn:5,rsiOut:70,maxDays:10,stopM:3,size:'vol'},
+  {id:'a3',fam:'A',name:'Rebote con miedo',kind:'dip',rsiIn:10,rsiOut:70,maxDays:10,stopM:3,size:'vol',fgMax:50},
+  {id:'a4',fam:'A',name:'Rebote, tamaño antiguo',kind:'dip',rsiIn:10,rsiOut:70,maxDays:10,stopM:3,size:'risk'},
+  {id:'b1',fam:'B',name:'Ruptura 55/20',kind:'brk',hiN:55,loN:20,stopM:2,size:'vol'},
+  {id:'b2',fam:'B',name:'Ruptura 20/10',kind:'brk',hiN:20,loN:10,stopM:2,size:'vol'},
+  {id:'b3',fam:'B',name:'Ruptura sin codicia',kind:'brk',hiN:55,loN:20,stopM:2,size:'vol',fgMax:80},
+  {id:'b4',fam:'B',name:'Ruptura, tamaño antiguo',kind:'brk',hiN:55,loN:20,stopM:2,size:'risk'}
 ];
+function hiArr(cs,n){var o=[],i,j,m;for(i=0;i<cs.length;i++){if(i<n-1){o.push(null);continue;}m=-Infinity;for(j=i-n+1;j<=i;j++)if(cs[j].h>m)m=cs[j].h;o.push(m);}return o;}
+function loArr(cs,n){var o=[],i,j,m;for(i=0;i<cs.length;i++){if(i<n-1){o.push(null);continue;}m=Infinity;for(j=i-n+1;j<=i;j++)if(cs[j].l<m)m=cs[j].l;o.push(m);}return o;}
+function indX(cs){
+  var I=ind(cs);I.r2=rsiArr(I.c,2);I.hi={};I.lo={};
+  VARIANTS.forEach(function(V){if(V.hiN&&!I.hi[V.hiN])I.hi[V.hiN]=hiArr(cs,V.hiN);if(V.loN&&!I.lo[V.loN])I.lo[V.loN]=loArr(cs,V.loN);});
+  return I;
+}
 function simulate(cs,I,V,fgMap,T0,splitT){
   var n=cs.length,i0=WARM,i,c,s,d,ef,z,e,fgv,v,touched=false;
   while(i0<n&&cs[i0].t<T0)i0++;
   if(i0>=n)return null;
-  var cp=START_CAP,p=null,T=[],peak=START_CAP,mdd=0,dayLoss={},costs=0,inBars=0,xs=0,bs=[],mddA=0,bMddA=0;
+  var cp=START_CAP,p=null,T=[],peak=START_CAP,mdd=0,dayLoss={},costs=0,inBars=0,xs=0,bs=[],mddA=0,bMddA=0,xsA=0,barsA=0,kS=0;
   var lastE=START_CAP,eSplit=null,bq=0,bPeak=START_CAP,bMdd=0,lastB=START_CAP,bSplit=null,bCost=0;
   function openAt(c,ef,qty,stop,tgt){
     var fin=FEE*qty*ef;
     costs+=fin+qty*(ef-c.o);
     cp-=fin;
-    p={entry:ef,qty:qty,stop:stop,tgt:tgt,t0:c.t,fin:fin,hc:-Infinity,exitNext:false,exitWhy:''};
+    p={entry:ef,qty:qty,stop:stop,tgt:tgt,t0:c.t,fin:fin,hc:-Infinity,exitNext:false,exitWhy:'',age:0};
     touched=true;
   }
   function exitAt(level,why,t){
@@ -352,7 +363,7 @@ function simulate(cs,I,V,fgMap,T0,splitT){
   }
   for(i=i0;i<n;i++){
     c=cs[i];
-    if(eSplit===null&&c.t>=splitT){eSplit=lastE;bSplit=lastB;mddA=mdd;bMddA=bMdd;}
+    if(eSplit===null&&c.t>=splitT){eSplit=lastE;bSplit=lastB;mddA=mdd;bMddA=bMdd;xsA=xs;barsA=i-i0;kS=bs.length;}
     touched=!!p;
     /* salida decidida al cierre anterior: se ejecuta en esta apertura */
     if(p&&p.exitNext)exitAt(c.o,p.exitWhy,c.t);
@@ -362,6 +373,16 @@ function simulate(cs,I,V,fgMap,T0,splitT){
         if(I.e200[i-1]!==null&&I.c[i-1]>I.e200[i-1]){
           ef=c.o*(1+SLIP);
           openAt(c,ef,cp/(ef*(1+FEE)),null,null);
+        }
+      }else if(V.kind==='dip'||V.kind==='brk'){
+        var jj=i-1,cj=I.c[jj],aj=I.atr[jj],go=false;
+        if(V.kind==='dip')go=I.e200[jj]!==null&&I.r2[jj]!==null&&cj>I.e200[jj]&&I.r2[jj]<V.rsiIn;
+        else{var hh=I.hi[V.hiN][jj-1];go=hh!==null&&hh!==undefined&&cj>hh;}
+        if(go&&V.fgMax&&fgMap){v=fgMap[dkey(cs[jj].t)];if(v!==undefined&&v>=V.fgMax)go=false;}
+        if(go&&aj){
+          ef=c.o*(1+SLIP);
+          var qq=V.size==='risk'?sizing(cp,ef,aj,V.stopM,null,0.5).qty:cp*Math.min(1,VOLT/(aj/cj))/(ef*(1+FEE));
+          openAt(c,ef,qq,ef-V.stopM*aj,null);
         }
       }else{
         s=sigAt(I,i-1);
@@ -377,7 +398,7 @@ function simulate(cs,I,V,fgMap,T0,splitT){
       }
     }
     /* stop y objetivo dentro de la vela; si abre más allá, se ejecuta en la apertura */
-    if(p&&V.kind==='rules'){
+    if(p&&p.stop!==null){
       if(c.o<=p.stop)exitAt(c.o,'stop',c.t);
       else if(p.tgt!==null&&c.o>=p.tgt)exitAt(c.o,'objetivo',c.t);
       else if(c.l<=p.stop)exitAt(p.stop,'stop',c.t);
@@ -387,6 +408,13 @@ function simulate(cs,I,V,fgMap,T0,splitT){
     if(p){
       if(V.kind==='ema200'){
         if(I.e200[i]!==null&&c.c<I.e200[i]){p.exitNext=true;p.exitWhy='tendencia';}
+      }else if(V.kind==='dip'){
+        p.age++;
+        if((I.r2[i]!==null&&I.r2[i]>V.rsiOut)||c.c>cs[i-1].h){p.exitNext=true;p.exitWhy='rebote';}
+        else if(p.age>=V.maxDays){p.exitNext=true;p.exitWhy='tiempo';}
+      }else if(V.kind==='brk'){
+        var ll=I.lo[V.loN][i-1];
+        if(ll!==null&&ll!==undefined&&c.c<ll){p.exitNext=true;p.exitWhy='canal';}
       }else{
         if(V.emaExit&&I.e50[i]!==null&&c.c<I.e50[i]){p.exitNext=true;p.exitWhy='tendencia';}
         if(V.trail){
@@ -409,14 +437,16 @@ function simulate(cs,I,V,fgMap,T0,splitT){
     if((bPeak-be)/bPeak>bMdd)bMdd=(bPeak-be)/bPeak;
     lastB=be;bs.push(be/START_CAP);
   }
-  if(eSplit===null){eSplit=lastE;bSplit=lastB;mddA=mdd;bMddA=bMdd;}
+  if(eSplit===null){eSplit=lastE;bSplit=lastB;mddA=mdd;bMddA=bMdd;xsA=xs;barsA=n-i0;kS=bs.length;}
   /* comprar y mantener solo con la misma fracción media de capital que usó la variante */
   var fx=xs/(n-i0),xp=1,xm=0,q;
   for(q=0;q<bs.length;q++){var xe=(1-fx)+fx*bs[q];if(xe>xp)xp=xe;if((xp-xe)/xp>xm)xm=(xp-xe)/xp;}
+  var fxA=barsA?xsA/barsA:0,yp=1,ym=0;
+  for(q=0;q<kS;q++){var ye=(1-fxA)+fxA*bs[q];if(ye>yp)yp=ye;if((yp-ye)/yp>ym)ym=(yp-ye)/yp;}
   var wins=0,nA=0,nTr=0,winsTr=0,k;
   for(k=0;k<T.length;k++){if(T[k].pnl>0)wins++;if(T[k].t0<splitT)nA++;if(T[k].t1<splitT){nTr++;if(T[k].pnl>0)winsTr++;}}
   return {from:cs[i0].t,to:cs[n-1].t,bars:n-i0,ret:lastE/START_CAP-1,mdd:mdd,n:T.length,wins:wins,nA:nA,nB:T.length-nA,
-    nTr:nTr,winsTr:winsTr,mddA:mddA,bMddA:bMddA,costs:costs,expo:inBars/(n-i0),expC:fx,bx:{ret:fx*(lastB/START_CAP-1),mdd:xm},segA:eSplit-START_CAP,segB:lastE-eSplit,open:!!p,T:T,
+    nTr:nTr,winsTr:winsTr,mddA:mddA,bMddA:bMddA,costs:costs,expo:inBars/(n-i0),expC:fx,bx:{ret:fx*(lastB/START_CAP-1),mdd:xm},expCA:fxA,bxA:{usd:fxA*(bSplit-START_CAP),mdd:ym},segA:eSplit-START_CAP,segB:lastE-eSplit,open:!!p,T:T,
     bh:{ret:lastB/START_CAP-1,mdd:bMdd,segA:bSplit-START_CAP,segB:lastB-bSplit,cost:bCost}};
 }
 function judge(r){
@@ -427,22 +457,30 @@ function judge(r){
   if(!(r.mdd<r.bh.mdd))why.push('su caída máxima ('+pct(-r.mdd)+') no es menor que la de comprar y mantener ('+pct(-r.bh.mdd)+')');
   return {pass:why.length===0,why:why,orient:r.n<30};
 }
-function runAll(c1,fm){
-  var T0=c1[Math.min(WARM,c1.length-1)].t,T1=c1[c1.length-1].t+DAYMS,splitT=T0+Math.round((T1-T0)*2/3),I=ind(c1);
+function runAll(c1,fm,ce){
+  var T0=c1[Math.min(WARM,c1.length-1)].t,T1=c1[c1.length-1].t+DAYMS,splitT=T0+Math.round((T1-T0)*2/3),I=indX(c1);
   var rows=VARIANTS.map(function(V){
     var r=simulate(c1,I,V,fm,T0,splitT);
     return {V:V,r:r,j:r?judge(r):null,score:null,chosen:false};
   });
-  /* elección fijada de antemano: solo con los dos primeros tercios; entre las que ganan, mayor beneficio relativo / caída máxima */
+  /* elección fijada de antemano: solo con los dos primeros tercios de BTC; entre las que ganan, mayor beneficio relativo / caída máxima */
   var best=null;
   rows.forEach(function(row){
     var r=row.r;
-    if(!r||!(r.segA>0))return;
+    if(!r||!(r.segA>0)||r.nTr<MINTR)return;
     row.score=(r.segA/START_CAP)/Math.max(r.mddA,0.01);
     if(!best||row.score>best.score)best=row;
   });
-  if(best)best.chosen=true;
-  return {rows:rows,T0:T0,T1:T1,splitT:splitT,n1:c1.length,best:best};
+  var eth=null,ne=ce?ce.length:0;
+  if(best){
+    best.chosen=true;
+    /* comprobación en ETH: solo la elegida, periodo completo */
+    if(ce&&ce.length>WARM+60){
+      var Ie=indX(ce),Te=ce[WARM].t,Tz=ce[ce.length-1].t+DAYMS;
+      eth=simulate(ce,Ie,best.V,fm,Te,Tz);
+    }
+  }
+  return {rows:rows,T0:T0,T1:T1,splitT:splitT,n1:c1.length,best:best,eth:eth,ne:ne};
 }
 
 /* ---------- fuentes de datos ---------- */
@@ -457,10 +495,10 @@ function jget(url,ms){
   return fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){clearTimeout(t);if(!r.ok)throw new Error('http '+r.status);return r.json();});
 }
 function sleepReal(ms){return new Promise(function(r){setTimeout(r,ms);});}
-function klinesUrl(s,end,limit,tf){
-  tf=tf||'4h';
-  if(s.kind==='bn')return s.base+'/api/v3/klines?symbol=BTCUSDT&interval='+tf+'&limit='+(limit||500)+(end?'&endTime='+end:'');
-  return s.base+'/0/public/OHLC?pair=XBTUSD&interval='+(tf==='1d'?1440:240);
+function klinesUrl(s,end,limit,tf,sym){
+  tf=tf||'4h';var eth=sym==='ETH';
+  if(s.kind==='bn')return s.base+'/api/v3/klines?symbol='+(eth?'ETHUSDT':'BTCUSDT')+'&interval='+tf+'&limit='+(limit||500)+(end?'&endTime='+end:'');
+  return s.base+'/0/public/OHLC?pair='+(eth?'ETHUSD':'XBTUSD')+'&interval='+(tf==='1d'?1440:240);
 }
 function parseK(s,j){
   if(s.kind==='bn')return j.map(function(r){return {t:r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]};});
@@ -715,11 +753,11 @@ async function ambient(){
 }
 
 /* ---------- prueba con datos pasados (interfaz) ---------- */
-async function fetchSeries(tf,count,prog,label){
+async function fetchSeries(tf,count,prog,label,sym){
   var s=src,all=[],end=0,req=0,ms=tf==='1d'?DAYMS:TFMS;
   if(s.kind==='bn'){
     while(all.length<count+2&&req<10){
-      var cs=parseK(s,await jget(klinesUrl(s,end,1000,tf),12000));
+      var cs=parseK(s,await jget(klinesUrl(s,end,1000,tf,sym),12000));
       if(!cs.length)break;
       all=cs.concat(all);end=cs[0].t-1;req++;
       prog('Descargando velas '+label+': '+all.length+'…');
@@ -727,7 +765,7 @@ async function fetchSeries(tf,count,prog,label){
       if(cs.length<1000)break;
     }
   }else{
-    all=parseK(s,await jget(klinesUrl(s,0,0,tf),12000));
+    all=parseK(s,await jget(klinesUrl(s,0,0,tf,sym),12000));
   }
   var seen={},out=[];
   all.forEach(function(c){if(!seen[c.t]){seen[c.t]=1;out.push(c);}});
@@ -743,19 +781,25 @@ async function fetchFngMap(){
 function sgnInt(n){var r=Math.round(n);return (r>0?'+':'')+fi(r);}
 function cls(x){return x>0?'up':(x<0?'down':'');}
 function renderBt(o,srcName,hasFng){
-  var rows=o.rows,best=o.best,base=rows[0].r,k;
-  var bh=base?base.bh:null,bhMdd=base?base.bMddA:0;
+  var rows=o.rows,best=o.best,ref=null,k;
+  for(k=0;k<rows.length;k++)if(rows[k].r){ref=rows[k].r;break;}
+  var bh=ref?ref.bh:null,bhMdd=ref?ref.bMddA:0;
   function cell(row,f){return row.r?f(row.r,row.V,row):'<td>Sin datos</td>';}
+  function wr(n,w){return n?Math.round(w/n*100)+' %':'—';}
   var M=[
+    ['Familia',function(r,V){return '<td>'+(V.fam==='A'?'A · rebote':'B · ruptura')+'</td>';},'<td>—</td>'],
     ['Operaciones',function(r){return '<td>'+r.nTr+'</td>';},'<td>1 compra</td>'],
-    ['Ganadas',function(r){return '<td>'+(r.nTr?Math.round(r.winsTr/r.nTr*100)+' %':'—')+'</td>';},'<td>—</td>'],
+    ['Ganadas',function(r){return '<td>'+wr(r.nTr,r.winsTr)+'</td>';},'<td>—</td>'],
     ['Beneficio (USDT)',function(r){return '<td class="'+cls(r.segA)+'">'+sgnInt(r.segA)+'</td>';},bh?'<td class="'+cls(bh.segA)+'">'+sgnInt(bh.segA)+'</td>':'<td>—</td>'],
     ['Caída máxima',function(r){return '<td class="down">'+pct(-r.mddA)+'</td>';},'<td class="down">'+pct(-bhMdd)+'</td>'],
+    ['Capital medio en BTC',function(r){return '<td>'+pct1(r.expCA)+'</td>';},'<td>100 %</td>'],
+    ['Comprar y mantener con ese capital medio (USDT)',function(r){return '<td class="'+cls(r.bxA.usd)+'">'+sgnInt(r.bxA.usd)+'</td>';},'<td>—</td>'],
     ['Beneficio entre caída',function(r,V,row){return '<td>'+(row.score===null?'—':row.score.toFixed(1).replace('.',','))+'</td>';},'<td>—</td>'],
     ['Elección',function(r,V,row){return '<td>'+(row.chosen?'<span class="pill up">Elegida</span>':'—')+'</td>';},'<td>—</td>'],
-    ['Examen del último tercio (USDT)',function(r,V,row){return '<td'+(row.chosen?' class="'+cls(r.segB)+'">'+sgnInt(r.segB):'>reservado')+'</td>';},'<td>reservado</td>']
+    ['Examen: último tercio de BTC (USDT)',function(r,V,row){return '<td'+(row.chosen?' class="'+cls(r.segB)+'">'+sgnInt(r.segB):'>reservado')+'</td>';},'<td>reservado</td>'],
+    ['Examen: ETH completo',function(r,V,row){return '<td'+(row.chosen&&o.eth?' class="'+cls(o.eth.ret)+'">'+pct(o.eth.ret):(row.chosen?'>sin datos':'>reservado'))+'</td>';},'<td>reservado</td>']
   ];
-  var html='<p class="hint swipe">Desliza la tabla hacia la izquierda para ver las 8 variantes. Todo lo de arriba es solo de los dos primeros tercios (entrenamiento).</p><div class="tbl" role="region" aria-label="Comparación de variantes" tabindex="0"><table><thead><tr><th scope="col">Importes en USDT</th>';
+  var html='<p class="hint swipe">Desliza la tabla hacia la izquierda para ver las 8 variantes. Salvo las dos filas de examen, todo es de los dos primeros tercios de BTC (entrenamiento).</p><div class="tbl" role="region" aria-label="Comparación de variantes" tabindex="0"><table><thead><tr><th scope="col">Importes en USDT</th>';
   rows.forEach(function(row){html+='<th scope="col">'+row.V.name+'</th>';});
   html+='<th scope="col" class="bhc">Comprar y mantener</th></tr></thead><tbody>';
   M.forEach(function(m){
@@ -764,42 +808,45 @@ function renderBt(o,srcName,hasFng){
     html+=m[2].replace('<td','<td data-bh="1"')+'</tr>';
   });
   html+='</tbody></table></div>';
-  var head=best?'Elegida con los dos primeros tercios: '+best.V.name+'.':'Ninguna variante gana dinero en los dos primeros tercios: no hay nada que elegir.';
-  html+='<p class="headline">'+head+'</p>';
-  /* aporte de cada empleado, medido solo en entrenamiento */
-  if(base){
-    var who=[['nolia','Lia (miedo y codicia)'],['nonova','Nova (RSI)'],['norex','Rex (filtro de volatilidad)'],['noexit','Marta (salida por la media)']];
-    var li=who.map(function(w){
-      var row=rows.filter(function(x){return x.V.id===w[0];})[0];
-      if(!row||!row.r)return '<li><b>'+w[1]+'</b>: sin datos.</li>';
-      var d=row.r.segA-base.segA,t='<b>'+w[1]+'</b>: ';
-      if(d<-1)t+='aporta. Sin esa pieza el beneficio baja de '+sgnInt(base.segA)+' a '+sgnInt(row.r.segA)+' USDT.';
-      else if(d>1)t+='estorba en entrenamiento. Sin esa pieza el beneficio sube de '+sgnInt(base.segA)+' a '+sgnInt(row.r.segA)+' USDT.';
-      else t+='no cambia nada en entrenamiento: sin esa pieza el resultado es el mismo ('+sgnInt(row.r.segA)+' USDT).';
-      return '<li>'+t+'</li>';
-    });
-    ['lia70','rex4','tgt2'].forEach(function(id){
-      var row=rows.filter(function(x){return x.V.id===id;})[0];
-      if(!row||!row.r)return;
-      var d=row.r.segA-base.segA;
-      li.push('<li><b>'+row.V.name+'</b>: '+(d>0?'mejora':'no mejora')+' a la Diaria en entrenamiento ('+sgnInt(row.r.segA)+' frente a '+sgnInt(base.segA)+' USDT).</li>');
-    });
-    html+='<p class="note"><b>Qué aporta cada empleado</b> (solo entrenamiento):</p><ul class="vd">'+li.join('')+'</ul>';
-  }
-  /* examen único del último tercio, solo para la elegida */
+  html+='<p class="headline">'+(best?'Elegida con los dos primeros tercios de BTC: '+best.V.name+'.':'Ninguna variante gana dinero en los dos primeros tercios de BTC con al menos 10 operaciones: no hay nada que elegir.')+'</p>';
+  /* familias y aporte de cada empleado (solo entrenamiento) */
+  function R(id){var x=rows.filter(function(r){return r.V.id===id;})[0];return x&&x.r?x.r:null;}
+  function cmp(a,b){return sgnInt(a.segA)+' USDT con caída '+pct(-a.mddA)+' frente a '+sgnInt(b.segA)+' con caída '+pct(-b.mddA);}
+  var li=[];
+  ['A','B'].forEach(function(f){
+    var rs=rows.filter(function(r){return r.V.fam===f&&r.r;});
+    if(!rs.length)return;
+    var tn=0,tw=0,pos=0;rs.forEach(function(r){tn+=r.r.nTr;tw+=r.r.winsTr;if(r.r.segA>0)pos++;});
+    li.push('<li><b>Familia '+f+(f==='A'?' (rebote)':' (ruptura)')+'</b>: acierta el '+wr(tn,tw)+' de media; '+pos+' de '+rs.length+' variantes ganan dinero.</li>');
+  });
+  var a1=R('a1'),a2=R('a2'),a3=R('a3'),a4=R('a4'),b1=R('b1'),b2=R('b2'),b3=R('b3'),b4=R('b4');
+  if(a1&&a4)li.push('<li><b>Rex (tamaño por volatilidad) en rebote</b>: '+cmp(a1,a4)+' con el tamaño antiguo.</li>');
+  if(b1&&b4)li.push('<li><b>Rex (tamaño por volatilidad) en ruptura</b>: '+cmp(b1,b4)+' con el tamaño antiguo.</li>');
+  if(a1&&a3)li.push('<li><b>Lia (entrar solo con miedo) en rebote</b>: '+(a3.segA>a1.segA+1?'aporta':'no aporta')+'. '+cmp(a3,a1)+' sin ella.</li>');
+  if(b1&&b3)li.push('<li><b>Lia (no entrar con codicia extrema) en ruptura</b>: '+(b3.segA>b1.segA+1?'aporta':'no aporta')+'. '+cmp(b3,b1)+' sin ella.</li>');
+  if(a1&&a2)li.push('<li><b>Nova, señal más exigente (RSI &lt; 5)</b>: '+cmp(a2,a1)+' con RSI &lt; 10.</li>');
+  if(b1&&b2)li.push('<li><b>Nova, ruptura más rápida (20/10)</b>: '+cmp(b2,b1)+' con 55/20.</li>');
+  li.push('<li><b>Marta</b>: sus salidas son parte de cada regla y en esta prueba no se miden por separado.</li>');
+  html+='<p class="note"><b>Familias y empleados</b> (solo entrenamiento; diferencias de pocas operaciones son ruido):</p><ul class="vd">'+li.join('')+'</ul>';
+  /* examen único: último tercio de BTC y ETH completo, solo la elegida */
   if(best){
-    var r=best.r,j=judge(r),wr=r.n?r.wins/r.n:0,g1=j.pass,g2=wr>=0.55,g3=wr>=0.70;
-    var ex='<li>Último tercio: <b>'+sgnInt(r.segB)+' USDT</b>. Todo el periodo: '+pct(r.ret)+' frente a '+pct(r.bh.ret)+' de comprar y mantener.</li>';
-    ex+='<li>Criterio de siempre: <b>'+(g1?'pasa':'no pasa')+'</b>'+(g1?'':' ('+j.why.join('; ')+')')+'.</li>';
-    ex+='<li>Aciertos: <b>'+Math.round(wr*100)+' %</b> de '+r.n+' operaciones. Meta de '+'55 %: <b>'+(g2?'cumplida':'no cumplida')+'</b>. Extra del 70 %: '+(g3?'conseguido':'no conseguido')+'.</li>';
-    if(r.n<30)ex+='<li>Orientativo: menos de 30 operaciones.</li>';
-    html+='<p class="note"><b>Examen del último tercio de '+best.V.name+'</b> (se mira una sola vez):</p><ul class="vd">'+ex+'</ul>';
-    html+='<p class="headline">'+(g1&&g2?'Meta cumplida en el pasado.':'Meta no cumplida.')+'</p>';
-    html+='<p class="note">Meta: ganar dinero tras comisiones (en los dos primeros tercios y en el último), pasar el criterio de siempre y acertar al menos el 55 % de las operaciones. El 70 % cuenta como extra. Cumplirla en el pasado no garantiza nada en el futuro.</p>';
+    var r=best.r,j=judge(r),w=r.n?r.wins/r.n:0,e=o.eth;
+    var g1=j.pass,g2=w>=0.55,g3=w>=0.70,g4=e?(e.ret>0&&e.mdd<e.bh.mdd):null;
+    var ex='<li>BTC, último tercio: <b>'+sgnInt(r.segB)+' USDT</b>. BTC, todo el periodo: '+pct(r.ret)+' frente a '+pct(r.bh.ret)+' de comprar y mantener.</li>';
+    ex+='<li>Criterio en BTC: <b>'+(g1?'pasa':'no pasa')+'</b>'+(g1?'':' ('+j.why.join('; ')+')')+'.</li>';
+    ex+='<li>Aciertos en BTC: <b>'+Math.round(w*100)+' %</b> de '+r.n+' operaciones. Meta del 55 %: <b>'+(g2?'cumplida':'no cumplida')+'</b>. Extra del 70 %: '+(g3?'conseguido':'no conseguido')+'.</li>';
+    if(e)ex+='<li>ETH, periodo completo: <b>'+pct(e.ret)+'</b> con caída '+pct(-e.mdd)+', frente a '+pct(e.bh.ret)+' y '+pct(-e.bh.mdd)+' de comprar y mantener. Acierta el '+(e.n?Math.round(e.wins/e.n*100):0)+' % de '+e.n+' operaciones. '+(g4?'Gana y cae menos: <b>pasa</b>.':'<b>No pasa</b>.')+'</li>';
+    else ex+='<li>ETH: no se pudieron cargar los datos, así que esta parte del examen queda sin hacer.</li>';
+    ex+='<li>¿Bate a comprar y mantener con el mismo capital medio en BTC ('+pct1(r.expC)+')? '+(r.ret>r.bx.ret?'<b>Sí</b>':'<b>No</b>')+': '+pct(r.ret)+' frente a '+pct(r.bx.ret)+'.</li>';
+    if(r.n<30||(e&&e.n<30))ex+='<li>Orientativo: menos de 30 operaciones en BTC o en ETH.</li>';
+    html+='<p class="note"><b>Examen de '+best.V.name+'</b> (se mira una sola vez):</p><ul class="vd">'+ex+'</ul>';
+    var met=g1&&g2&&g4===true;
+    html+='<p class="headline">'+(met?'Meta cumplida en el pasado.':(g4===null&&g1&&g2?'Meta sin comprobar del todo: falta ETH.':'Meta no cumplida.'))+'</p>';
   }
-  var notes='Periodo: '+dkey(o.T0)+' a '+dkey(o.T1-1)+'. Los tercios se cortan el '+dkey(o.splitT)+'. Fuente: '+srcName+' ('+fi(o.n1)+' velas diarias, incluidas 205 de calentamiento para las medias).';
-  if(base&&base.bars<900)notes+=' La serie es corta: el resultado es poco fiable.';
-  notes+=' Las 8 variantes y la regla de elección se fijaron antes de ver resultados: entre las que ganan en entrenamiento, la de mayor beneficio entre caída máxima. El último tercio solo se mira para la elegida. Aviso: ese último tercio ya se vio en la prueba anterior (con otras variantes y la Diaria), así que no es un examen limpio; la validación limpia es la prueba en vivo con dinero ficticio, que empezó con la Diaria el 14 de octubre de 2026. Las señales se evalúan al cierre de la vela y se ejecutan en la apertura de la siguiente. Si el precio abre más allá del stop o del objetivo, se ejecuta a la apertura; si una vela toca ambos, se asume el stop. Comisión del 0,1 % por lado y deslizamiento del 0,05 %. '+(hasFng?'Se aplica el filtro de miedo y codicia.':'No se pudo cargar el miedo y codicia histórico, así que esta prueba no lo aplica.');
+  html+='<p class="note">Meta fijada de antemano: ganar dinero tras comisiones en entrenamiento y en examen (último tercio de BTC y ETH completo), caer menos que comprar y mantener y acertar al menos el 55 % de las operaciones. El 70 % es un extra. Cumplirla en el pasado no garantiza nada en el futuro.</p>';
+  var notes='BTC: '+dkey(o.T0)+' a '+dkey(o.T1-1)+', tercios cortados el '+dkey(o.splitT)+'. Fuente: '+srcName+' ('+fi(o.n1)+' velas diarias de BTC'+(o.ne?' y '+fi(o.ne)+' de ETH':'')+', incluidas 205 de calentamiento).';
+  if(ref&&ref.bars<900)notes+=' La serie es corta: el resultado es poco fiable.';
+  notes+=' Las 8 variantes, el tamaño y la regla de elección se fijaron antes de ver resultados: entre las que ganan en entrenamiento con al menos 10 operaciones cerradas, la de mayor beneficio entre caída máxima. El examen solo se hace a la elegida. Aviso: el último tercio de BTC ya se vio en pruebas anteriores, así que el examen más limpio es ETH y, sobre todo, la prueba en vivo. Rebote: entra si el cierre está sobre la media de 200 días y el RSI de 2 días baja de 10 (o de 5); sale cuando el RSI de 2 días pasa de 70 o el cierre supera el máximo del día anterior, a los 10 días como mucho, o en el stop a 3 ATR. Ruptura: entra si el cierre supera el máximo de los 55 (o 20) días anteriores; sale si el cierre baja del mínimo de los 20 (o 10) días anteriores, o en el stop a 2 ATR. Tamaño nuevo: un día normal (1 ATR) mueve como mucho un 2 % del capital, hasta el 100 %; tamaño antiguo: 1 % de riesgo hasta el stop y como mucho el 50 %. Señales al cierre, ejecución en la apertura siguiente; si el precio abre más allá del stop, se ejecuta a la apertura. Comisión del 0,1 % por lado y deslizamiento del 0,05 %. '+(hasFng?'Se aplica el miedo y codicia histórico en las variantes de Lia.':'No se pudo cargar el miedo y codicia histórico, así que las variantes de Lia no lo aplican.');
   html+='<p class="note">'+notes+'</p>';
   return html;
 }
@@ -809,13 +856,15 @@ async function runBt(){
   btn.disabled=true;res.innerHTML='';
   function prog(t){pr.textContent=t;}
   try{
-    var c1=await fetchSeries('1d',1096+WARM,prog,'diarias');
+    var c1=await fetchSeries('1d',1096+WARM,prog,'diarias de BTC','BTC');
     if(c1.length<400){prog('Esta fuente solo da '+c1.length+' velas diarias: no basta para una prueba seria.');btn.disabled=false;return;}
+    var ce=null;
+    try{ce=await fetchSeries('1d',1096+WARM,prog,'diarias de ETH','ETH');}catch(e){ce=null;}
     prog('Descargando miedo y codicia histórico…');
     var fm=await fetchFngMap();
     prog('Calculando…');
     await sleepReal(30);
-    res.innerHTML=renderBt(runAll(c1,fm),src.id,!!fm);prog('');
+    res.innerHTML=renderBt(runAll(c1,fm,ce),src.id,!!fm);prog('');
   }catch(e){prog('No se pudo completar la prueba: '+(e&&e.message?e.message:'error de red')+'.');}
   btn.disabled=false;
 }
