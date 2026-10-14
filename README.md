@@ -15,4 +15,11 @@ Oficina en pixel art donde cinco empleados virtuales operan Bitcoin con dinero f
 - Meta: ganar dinero tras comisiones en entrenamiento y en examen (último tercio de BTC y ETH), caer menos que comprar y mantener y acertar al menos el 55 % de las operaciones. El 70 % es un extra. Con menos de 30 operaciones el resultado es orientativo. También se muestra si la elegida bate a comprar y mantener con el mismo capital medio dentro, que es la prueba de ventaja real.
 - La oficina en vivo revisa el mercado una vez al día (cierre de la vela diaria, 00:00 UTC) con la variante Diaria: velas de 1 día, volatilidad máxima del 6 %, stop a 2 ATR, objetivo a 3 ATR y salida si el cierre baja de la media de 50 días. Pasó la prueba por poco; no tiene ventaja demostrada. El capital ficticio empieza de cero (10.000 USDT) con esta versión.
 
+- El botón "Probar financiación" simula cobrar la tasa de financiación de los futuros perpetuos de Binance: comprar BTC al contado y vender la misma cantidad en futuros, de modo que el precio no importa. Usa el historial público de tasas (cada 8 horas) y velas diarias de unos 3 años.
+  - 4 variantes fijadas antes de ver datos: siempre dentro con el 50 % del capital en cada lado; siempre dentro con el 67 % (Rex arriesga más); entrar solo si la media de las tasas de los últimos 3 días es positiva (Lia); y solo si supera el 0,01 % cada 8 horas (Lia exigente).
+  - Costes de 0,25 % del nocional por entrar o salir, reequilibrio si el nocional se desvía más de un 25 % del objetivo, y una liquidación (1 % del nocional) si el máximo del día habría agotado el 90 % del margen.
+  - Elección con los dos primeros tercios de BTC (mayor rendimiento anual entre caída máxima) y examen una sola vez con el último tercio de BTC y con ETH.
+  - Meta: ganar tras costes en entrenamiento, último tercio de BTC y ETH; caída máxima < 5 %; más de un 4 % al año; y al menos el 55 % de los días dentro con ganancia.
+  - Simplificaciones y riesgos no simulados: se ignora la diferencia entre el precio de futuros y el de contado, se cobra la financiación del día entero, y no se recoge el riesgo de que el exchange quiebre o congele fondos.
+
 No es asesoramiento financiero.

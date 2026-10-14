@@ -63,8 +63,8 @@ ul,ol{list-style:none;margin:0;padding:0}
 .dot.off{background:var(--down)}
 .vd{margin:12px 0 0;display:flex;flex-direction:column;gap:6px}
 .vd li{font-size:13px;line-height:1.45;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
-#btRes{margin-top:12px}
-#btRes .note{margin-top:10px}
+#btRes,#fdRes{margin-top:12px}
+#btRes .note,#fdRes .note{margin-top:10px}
 button:disabled{opacity:.6;cursor:default}
 .callout{margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font-size:13px;line-height:1.45}
 .callout b{font-weight:600;color:var(--down)}
@@ -132,6 +132,16 @@ button:disabled{opacity:.6;cursor:default}
       <span class="hint" id="btProg"></span>
     </div>
     <div id="btRes"></div>
+  </section>
+
+  <section>
+    <h2>Prueba: cobrar la financiación</h2>
+    <p class="note">Compra BTC al contado y abre a la vez una venta en futuros perpetuos por la misma cantidad. Así el precio deja de importar y se cobra (o se paga) la tasa de financiación que Binance Futures publica cada 8 horas. Compara 4 variantes con unos 3 años de datos y costes: siempre dentro con el 50 % o el 67 % del capital en cada lado, y entrar solo cuando la tasa reciente es positiva o alta. Se elige una con los dos primeros tercios de BTC y se examina una vez con el último tercio de BTC y con ETH. Dinero ficticio; la oficina en vivo no cambia.</p>
+    <div class="bar">
+      <button id="fdBtn" type="button">Probar financiación</button>
+      <span class="hint" id="fdProg"></span>
+    </div>
+    <div id="fdRes"></div>
   </section>
 
   <p class="note">Las decisiones las toman reglas fijas (medias, RSI y volatilidad), no un modelo de IA. El dinero es ficticio y no hay ninguna conexión con cuentas ni órdenes reales. El capital y la posición se guardan en este navegador. Esto no es asesoramiento financiero.</p>
@@ -869,6 +879,147 @@ async function runBt(){
   btn.disabled=false;
 }
 
+/* ---------- prueba de cobro de financiación (neutral al precio) ---------- */
+/* Fijado antes de ver datos.
+   Cada día: 1) se ejecuta en la apertura lo decidido al cierre anterior; 2) si el máximo del día habría liquidado la venta en futuros, se paga una penalización del 1 % del nocional y se vuelve a cubrir;
+   3) se cobra o paga la financiación del día (suma de las 3 tasas) sobre el nocional al cierre; 4) si el nocional se desvía más de un 25 % del objetivo, se reequilibra; 5) se decide para el día siguiente.
+   Costes por entrar o salir: contado 0,1 % + 0,05 % de deslizamiento y futuros 0,05 % + 0,05 % → 0,25 % del nocional. Se ignora la diferencia entre el precio de futuros y el de contado. */
+var CCOST=0.0025,RCOST=0.0015,LIQPEN=0.01;
+var CARRY=[
+  {id:'c1',name:'Siempre, 50 %',f:0.5,th:null},
+  {id:'c2',name:'Siempre, 67 %',f:2/3,th:null},
+  {id:'c3',name:'Si cobra, 50 %',f:0.5,th:0},
+  {id:'c4',name:'Si cobra bien, 50 %',f:0.5,th:0.0001}
+];
+function fundDays(list){var m={};list.forEach(function(x){var k=dkey(x.t);m[k]=(m[k]||0)+x.r;});return m;}
+function carrySim(cs,fd,V,T0,splitT){
+  var n=cs.length,i0=0,i;
+  while(i0<n&&cs[i0].t<T0)i0++;
+  if(i0>=n)return null;
+  var E=START_CAP,qty=0,P0=0,M=0,inPos=false,pend=V.th===null?'in':null,costs=0,funding=0,rebal=0,liq=0,entries=0,inDays=0,posDays=0,miss=0;
+  var peak=E,mdd=0,eSplit=null,mddA=0,last=E,inA=0,posA=0,daysA=0;
+  function hedge(px){qty=V.f*E/px;P0=px;M=E-qty*px;}
+  for(i=i0;i<n;i++){
+    var c=cs[i],d=dkey(c.t),e0=E;
+    if(eSplit===null&&c.t>=splitT){eSplit=E;mddA=mdd;inA=inDays;posA=posDays;daysA=i-i0;}
+    if(pend==='in'&&!inPos){hedge(c.o);var k1=qty*c.o*CCOST;E-=k1;costs+=k1;M-=k1;inPos=true;entries++;}
+    else if(pend==='out'&&inPos){var k2=qty*c.o*CCOST;E-=k2;costs+=k2;inPos=false;qty=0;}
+    pend=null;
+    if(inPos){
+      if(qty*(c.h-P0)>=0.9*M){var k3=qty*c.h*LIQPEN+qty*c.h*CCOST/2;E-=k3;costs+=k3;liq++;hedge(c.c);}
+      var fr=fd[d];if(fr===undefined){fr=0;miss++;}
+      var fp=qty*c.c*fr;E+=fp;funding+=fp;M+=fp;
+      if(Math.abs(qty*c.c/(V.f*E)-1)>0.25){
+        var nq=V.f*E/c.c,k4=Math.abs(qty*(c.c-P0))*RCOST+Math.abs(nq-qty)*c.c*CCOST;
+        E-=k4;costs+=k4;rebal++;hedge(c.c);
+      }
+      inDays++;if(E>e0)posDays++;
+    }
+    /* decisión al cierre con las tasas de los últimos 3 días (9 tasas) */
+    if(V.th!==null){
+      var sum=0,cnt=0;
+      for(var b=0;b<3;b++){var kk=dkey(c.t-b*DAYMS);if(fd[kk]!==undefined){sum+=fd[kk];cnt++;}}
+      var want=cnt>0&&sum/(cnt*3)>V.th;
+      if(want&&!inPos)pend='in';else if(!want&&inPos)pend='out';
+    }
+    if(E>peak)peak=E;
+    if((peak-E)/peak>mdd)mdd=(peak-E)/peak;
+    last=E;
+  }
+  if(eSplit===null){eSplit=E;mddA=mdd;inA=inDays;posA=posDays;daysA=n-i0;}
+  var days=n-i0,ret=last/START_CAP-1;
+  function ann(r,dd){return dd>0?Math.pow(1+r,365/dd)-1:0;}
+  return {from:cs[i0].t,days:days,ret:ret,annual:ann(ret,days),mdd:mdd,segA:eSplit-START_CAP,segB:last-eSplit,mddA:mddA,
+    annA:ann((eSplit-START_CAP)/START_CAP,daysA),daysA:daysA,inA:inA,posA:posA,inDays:inDays,posDays:posDays,
+    expo:inDays/days,costs:costs,funding:funding,rebal:rebal,liq:liq,entries:entries,miss:miss};
+}
+function carryRun(cb,fb,ce,fe){
+  var T0=cb[Math.min(WARM,cb.length-1)].t,T1=cb[cb.length-1].t+DAYMS,splitT=T0+Math.round((T1-T0)*2/3);
+  var fdb=fundDays(fb),best=null;
+  var rows=CARRY.map(function(V){var r=carrySim(cb,fdb,V,T0,splitT);return {V:V,r:r,score:null,chosen:false};});
+  rows.forEach(function(row){var r=row.r;if(!r||!(r.segA>0))return;row.score=r.annA/Math.max(r.mddA,0.005);if(!best||row.score>best.score)best=row;});
+  var eth=null;
+  if(best){best.chosen=true;if(ce&&fe&&ce.length>WARM+60){var Te=ce[WARM].t;eth=carrySim(ce,fundDays(fe),best.V,Te,ce[ce.length-1].t+DAYMS);}}
+  return {rows:rows,T0:T0,T1:T1,splitT:splitT,best:best,eth:eth,nf:fb.length,nfe:fe?fe.length:0};
+}
+function renderCarry(o){
+  var rows=o.rows,best=o.best;
+  function cell(row,f){return row.r?f(row.r,row):'<td>Sin datos</td>';}
+  function pp(n,d){return d?Math.round(n/d*100)+' %':'—';}
+  var M=[
+    ['Rendimiento anual',function(r){return '<td class="'+cls(r.annA)+'">'+pct(r.annA)+'</td>';}],
+    ['Beneficio (USDT)',function(r){return '<td class="'+cls(r.segA)+'">'+sgnInt(r.segA)+'</td>';}],
+    ['Caída máxima',function(r){return '<td class="down">'+pct(-r.mddA)+'</td>';}],
+    ['Tiempo dentro',function(r){return '<td>'+pp(r.inA,r.daysA)+'</td>';}],
+    ['Días dentro con ganancia',function(r){return '<td>'+pp(r.posA,r.inA)+'</td>';}],
+    ['Beneficio entre caída',function(r,row){return '<td>'+(row.score===null?'—':row.score.toFixed(1).replace('.',','))+'</td>';}],
+    ['Elección',function(r,row){return '<td>'+(row.chosen?'<span class="pill up">Elegida</span>':'—')+'</td>';}],
+    ['Examen: último tercio de BTC (USDT)',function(r,row){return '<td'+(row.chosen?' class="'+cls(r.segB)+'">'+sgnInt(r.segB):'>reservado')+'</td>';}],
+    ['Examen: ETH completo',function(r,row){return '<td'+(row.chosen&&o.eth?' class="'+cls(o.eth.ret)+'">'+pct(o.eth.ret):(row.chosen?'>sin datos':'>reservado'))+'</td>';}]
+  ];
+  var html='<p class="hint swipe">Salvo las dos filas de examen, todo es de los dos primeros tercios de BTC (entrenamiento).</p><div class="tbl" role="region" aria-label="Comparación de variantes de financiación" tabindex="0"><table><thead><tr><th scope="col">Importes en USDT</th>';
+  rows.forEach(function(row){html+='<th scope="col">'+row.V.name+'</th>';});
+  html+='</tr></thead><tbody>';
+  M.forEach(function(m){html+='<tr><th scope="row">'+m[0]+'</th>';rows.forEach(function(row){html+=cell(row,m[1]);});html+='</tr>';});
+  html+='</tbody></table></div>';
+  html+='<p class="headline">'+(best?'Elegida con los dos primeros tercios de BTC: '+best.V.name+'.':'Ninguna variante gana dinero en los dos primeros tercios de BTC: no hay nada que elegir.')+'</p>';
+  function R(id){var x=rows.filter(function(r){return r.V.id===id;})[0];return x&&x.r?x.r:null;}
+  var c1=R('c1'),c2=R('c2'),c3=R('c3'),c4=R('c4'),li=[];
+  function cmp(a,b){return pct(a.annA)+' al año con caída '+pct(-a.mddA)+' frente a '+pct(b.annA)+' con caída '+pct(-b.mddA);}
+  if(c1&&c3)li.push('<li><b>Lia (salir cuando la tasa es negativa)</b>: '+(c3.annA>c1.annA+0.001?'aporta':'no aporta')+'. '+cmp(c3,c1)+' sin ella.</li>');
+  if(c1&&c4)li.push('<li><b>Lia exigente (solo con tasa alta)</b>: '+(c4.annA>c1.annA+0.001?'aporta':'no aporta')+'. '+cmp(c4,c1)+' siempre dentro.</li>');
+  if(c1&&c2)li.push('<li><b>Rex (67 % en vez de 50 %)</b>: '+cmp(c2,c1)+'. Más capital trabajando, pero más cerca de la liquidación ('+c2.liq+' liquidaciones y '+c2.rebal+' reequilibrios en todo el periodo).</li>');
+  if(c1)li.push('<li><b>Financiación cobrada</b> siempre dentro con el 50 %: '+sgnInt(c1.funding)+' USDT en todo el periodo, con '+fi(c1.costs)+' de costes.</li>');
+  if(li.length)html+='<p class="note"><b>Qué aporta cada empleado</b> (solo entrenamiento, salvo la última línea):</p><ul class="vd">'+li.join('')+'</ul>';
+  if(best){
+    var r=best.r,e=o.eth,wd=r.inDays?r.posDays/r.inDays:0;
+    var g1=r.segA>0&&r.segB>0,g2=e?e.ret>0:null,g3=r.mdd<0.05,g4=r.annual>0.04,g5=wd>=0.55;
+    var ex='<li>BTC, último tercio: <b>'+sgnInt(r.segB)+' USDT</b>. Todo el periodo: '+pct(r.ret)+', un '+pct(r.annual)+' al año, con caída máxima '+pct(-r.mdd)+'.</li>';
+    ex+='<li>Días dentro con ganancia: <b>'+Math.round(wd*100)+' %</b> (meta del 55 %: '+(g5?'cumplida':'no cumplida')+'). Liquidaciones: '+r.liq+'. Reequilibrios: '+r.rebal+'. Costes: '+fi(r.costs)+' USDT.</li>';
+    if(e)ex+='<li>ETH, periodo completo: <b>'+pct(e.ret)+'</b>, un '+pct(e.annual)+' al año, con caída '+pct(-e.mdd)+' y '+e.liq+' liquidaciones. '+(g2?'Gana: <b>pasa</b>.':'<b>No pasa</b>.')+'</li>';
+    else ex+='<li>ETH: no se pudieron cargar los datos, así que esta parte del examen queda sin hacer.</li>';
+    if(r.miss>30)ex+='<li>Faltan datos de financiación en '+r.miss+' días: el resultado es menos fiable.</li>';
+    html+='<p class="note"><b>Examen de '+best.V.name+'</b> (se mira una sola vez):</p><ul class="vd">'+ex+'</ul>';
+    var met=g1&&g2===true&&g3&&g4&&g5;
+    html+='<p class="headline">'+(met?'Meta cumplida en el pasado.':(g2===null&&g1&&g3&&g4&&g5?'Meta sin comprobar del todo: falta ETH.':'Meta no cumplida.'))+'</p>';
+  }
+  html+='<p class="note">Meta fijada de antemano: ganar dinero tras costes en entrenamiento, en el último tercio de BTC y en ETH; caída máxima menor del 5 %; más de un 4 % al año en BTC (algo más que un depósito); y al menos el 55 % de los días dentro con ganancia. Cumplirla en el pasado no garantiza nada en el futuro.</p>';
+  html+='<p class="note">Periodo de BTC: '+dkey(o.T0)+' a '+dkey(o.T1-1)+', tercios cortados el '+dkey(o.splitT)+'. Fuente: Binance (velas diarias de contado y '+fi(o.nf)+' tasas de financiación de BTC'+(o.nfe?' y '+fi(o.nfe)+' de ETH':'')+'). Elección: entre las que ganan en entrenamiento, la de mayor rendimiento anual entre caída máxima. Simplificaciones: se cobra la financiación del día entero sobre el nocional al cierre, se ignora la diferencia entre el precio de futuros y el de contado, y una liquidación cuesta un 1 % del nocional más volver a cubrirse. Costes de entrar o salir: 0,25 % del nocional. Riesgos que esta prueba no recoge: que el exchange quiebre o congele fondos (como FTX en 2022), cambios de comisiones y la diferencia de precio entre futuros y contado en momentos de pánico.</p>';
+  return html;
+}
+async function fetchFunding(sym,startMs,prog){
+  var out=[],st=startMs,req=0,base='https://fapi.binance.com';
+  while(req<12){
+    var j=await jget(base+'/fapi/v1/fundingRate?symbol='+sym+'USDT&limit=1000&startTime='+st,12000);
+    if(!j||!j.length)break;
+    j.forEach(function(x){out.push({t:+x.fundingTime,r:+x.fundingRate});});
+    st=+j[j.length-1].fundingTime+1;req++;
+    prog('Descargando financiación de '+sym+': '+out.length+'…');
+    await sleepReal(150);
+    if(j.length<1000)break;
+  }
+  return out;
+}
+async function runFd(){
+  var btn=document.getElementById('fdBtn'),pr=document.getElementById('fdProg'),res=document.getElementById('fdRes');
+  if(!src){pr.textContent='Todavía no hay conexión con el mercado.';return;}
+  btn.disabled=true;res.innerHTML='';
+  function prog(t){pr.textContent=t;}
+  try{
+    var cb=await fetchSeries('1d',1096+WARM,prog,'diarias de BTC','BTC');
+    if(cb.length<400){prog('Esta fuente solo da '+cb.length+' velas diarias: no basta para una prueba seria.');btn.disabled=false;return;}
+    var start=cb[Math.min(WARM,cb.length-1)].t-4*DAYMS,fb;
+    try{fb=await fetchFunding('BTC',start,prog);}catch(e){fb=null;}
+    if(!fb||fb.length<300){prog('No se pudo descargar la financiación de Binance Futures desde este navegador.');btn.disabled=false;return;}
+    var ce=null,fe=null;
+    try{ce=await fetchSeries('1d',1096+WARM,prog,'diarias de ETH','ETH');fe=await fetchFunding('ETH',ce[Math.min(WARM,ce.length-1)].t-4*DAYMS,prog);}catch(e){ce=null;fe=null;}
+    prog('Calculando…');
+    await sleepReal(30);
+    res.innerHTML=renderCarry(carryRun(cb,fb,ce,fe));prog('');
+  }catch(e){prog('No se pudo completar la prueba: '+(e&&e.message?e.message:'error de red')+'.');}
+  btn.disabled=false;
+}
+
 /* ---------- dibujo del fondo ---------- */
 function plant(g,x,y){
   R(g,x-5,y-7,10,7,'#a2573a');R(g,x-5,y-7,10,1,'#c27050');
@@ -1137,6 +1288,7 @@ document.getElementById('meet').addEventListener('click',function(){
   pendingReview=true;
 });
 document.getElementById('btBtn').addEventListener('click',runBt);
+document.getElementById('fdBtn').addEventListener('click',runFd);
 setInterval(function(){eq.push(equity());if(eq.length>48)eq.shift();},10000);
 
 drawBg();
