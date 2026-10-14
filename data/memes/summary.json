@@ -1,7 +1,7 @@
 {
- "updated": 1792002859372,
- "tracked": 70,
- "last24h": 70,
+ "updated": 1792016135569,
+ "tracked": 103,
+ "last24h": 103,
  "rules": {
   "minLiq": 1000,
   "deadDrop": 0.9
@@ -9,11 +9,11 @@
  "checkpoints": [
   {
    "hours": 6,
-   "n": 0,
-   "dead": null,
-   "x2": null,
-   "medianChange": null,
-   "medianLiq": null
+   "n": 30,
+   "dead": 0.26666666666666666,
+   "x2": 0.06666666666666667,
+   "medianChange": -0.01827232719860028,
+   "medianLiq": 2325.0475
   },
   {
    "hours": 24,
@@ -42,52 +42,52 @@
  ],
  "latest": [
   {
-   "name": "JPC / SOL",
-   "first": 1792002859372,
-   "liq": 3502.7162,
-   "fdv": 9570.797046
+   "name": "spinr / SOL",
+   "first": 1792016135569,
+   "liq": 2863.15529352412,
+   "fdv": 4629.7216
   },
   {
-   "name": "boi / SOL",
-   "first": 1792002859372,
-   "liq": 2340.0962,
-   "fdv": 39959.27713
+   "name": "OCTO / SOL",
+   "first": 1792016135569,
+   "liq": 2830.8506,
+   "fdv": 3330.930414
   },
   {
-   "name": "Jack / SOL",
-   "first": 1792002859372,
-   "liq": 16396.2171,
-   "fdv": 8205.583109
+   "name": "SOGUR / SOL",
+   "first": 1792016135569,
+   "liq": 2384.673,
+   "fdv": 3092.685022
   },
   {
-   "name": "SQUEEZEDAY / SOL",
-   "first": 1792002859372,
-   "liq": 2948.3683,
-   "fdv": 2948.945488
+   "name": "ACTX / SOL",
+   "first": 1792016135569,
+   "liq": 2017.47190589875,
+   "fdv": 29503.98708
   },
   {
-   "name": "fone / SPYx",
-   "first": 1792002859372,
-   "liq": 2568.4203,
-   "fdv": 3240.84983
+   "name": "CENTED READ / SOL",
+   "first": 1792016135569,
+   "liq": 2317.64305312569,
+   "fdv": 2922.258294
   },
   {
-   "name": "DIHVAL / SOL",
-   "first": 1792002859372,
-   "liq": 2898.64828598086,
-   "fdv": 2906.698255
+   "name": "VAMPURR / RDDT",
+   "first": 1792016135569,
+   "liq": 2836.96081501816,
+   "fdv": 3658.212246
   },
   {
-   "name": "￼ / SOL",
-   "first": 1792002859372,
-   "liq": 3327.1979,
-   "fdv": 4336.996062
+   "name": "DOOYET / SOL",
+   "first": 1792016135569,
+   "liq": 3824.89175279427,
+   "fdv": 9707.869434
   },
   {
-   "name": "FUCAT / SOL",
-   "first": 1792002859372,
-   "liq": 4444.0009,
-   "fdv": 6423.274038
+   "name": "CENTED READ / SOL",
+   "first": 1792016135569,
+   "liq": 2452.0477,
+   "fdv": 2999.119044
   }
  ]
 }
